@@ -4,3 +4,4 @@ export * from './utxo';
 export * from './transaction';
 export * from './seed-wallet';
 export * from './signing';
+export * from './sync';

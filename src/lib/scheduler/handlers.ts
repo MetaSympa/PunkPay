@@ -5,6 +5,7 @@ import { fetchUtxos, fetchTransactionStatus, broadcastTransaction, selectUtxos, 
 import { getMempoolApiUrl } from '../bitcoin/networks';
 import { buildPsbt, calculateFee, extractRawTx, serializePsbt } from '../bitcoin/transaction';
 import { deriveAddress, type AddressType } from '../bitcoin/hd-wallet';
+import { syncWalletUtxos } from '../bitcoin/sync';
 import { decrypt } from '../crypto/encryption';
 import { signPsbt, broadcastTx } from '../bitcoin/signing';
 import { sendSignalMessage } from '../signal/client';
@@ -183,6 +184,20 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     },
   });
 
+  // Save the change address so future syncs can discover the change UTXO
+  if (change > 546n) {
+    await prisma.address.upsert({
+      where: { address: changeAddr.address },
+      update: {},
+      create: {
+        walletId,
+        address: changeAddr.address,
+        index: wallet.nextChangeIndex,
+        chain: 'INTERNAL',
+      },
+    });
+  }
+
   // Update wallet change index
   await prisma.wallet.update({
     where: { id: walletId },
@@ -197,65 +212,17 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
 }
 
 /**
- * Sync UTXOs for a wallet
+ * Sync UTXOs for a wallet — uses smart gap-limit scan
  */
 export async function handleUtxoSync(job: Job<UtxoSyncJobData>): Promise<void> {
   const { walletId } = job.data;
 
   const wallet = await prisma.wallet.findUniqueOrThrow({
     where: { id: walletId },
-    include: { addresses: true },
   });
 
-  const decryptedXpub = decrypt(wallet.encryptedXpub);
-
-  const baseUrl = getMempoolApiUrl(wallet.network);
-
-  // Derive and check addresses
-  for (const addr of wallet.addresses) {
-    const utxos = await fetchUtxos(addr.address, wallet.network);
-
-    for (const utxo of utxos) {
-      // Fetch the actual scriptPubKey from the transaction output
-      let scriptPubKey = '';
-      try {
-        const txRes = await fetch(`${baseUrl}/tx/${utxo.txid}`);
-        if (txRes.ok) {
-          const txData = await txRes.json();
-          scriptPubKey = txData?.vout?.[utxo.vout]?.scriptpubkey || '';
-        }
-      } catch {
-        // Non-fatal: scriptPubKey will be fetched on retry
-      }
-
-      await prisma.utxo.upsert({
-        where: { txid_vout: { txid: utxo.txid, vout: utxo.vout } },
-        update: {
-          status: utxo.status.confirmed ? 'CONFIRMED' : 'UNCONFIRMED',
-          ...(scriptPubKey ? { scriptPubKey } : {}),
-        },
-        create: {
-          walletId,
-          addressId: addr.id,
-          txid: utxo.txid,
-          vout: utxo.vout,
-          valueSats: BigInt(utxo.value),
-          status: utxo.status.confirmed ? 'CONFIRMED' : 'UNCONFIRMED',
-          scriptPubKey,
-        },
-      });
-    }
-
-    // Mark address as used if it has UTXOs or history
-    if (utxos.length > 0 && !addr.isUsed) {
-      await prisma.address.update({
-        where: { id: addr.id },
-        data: { isUsed: true },
-      });
-    }
-  }
-
-  job.log(`UTXO sync complete for wallet ${walletId}`);
+  const result = await syncWalletUtxos(walletId, wallet.network);
+  job.log(`UTXO sync complete — checked ${result.addressesChecked} addresses, found ${result.utxosFound} UTXOs, balance: ${result.totalSats} sats`);
 }
 
 /**

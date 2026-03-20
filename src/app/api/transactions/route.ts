@@ -122,6 +122,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Save the change address so future syncs can discover the change UTXO
+    if (change > 546n) {
+      await prisma.address.upsert({
+        where: { address: changeAddr.address },
+        update: {},
+        create: {
+          walletId: data.walletId,
+          address: changeAddr.address,
+          index: wallet.nextChangeIndex,
+          chain: 'INTERNAL',
+        },
+      });
+    }
+
     await prisma.wallet.update({
       where: { id: wallet.id },
       data: { nextChangeIndex: { increment: 1 } },
