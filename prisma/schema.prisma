@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PAYER
+  RECIPIENT
+  ADMIN
+}
+
+enum UtxoStatus {
+  UNCONFIRMED
+  CONFIRMED
+  SPENT
+  LOCKED
+}
+
+enum TransactionType {
+  SEND
+  RECEIVE
+  CONSOLIDATE
+  SCHEDULED
+}
+
+enum TransactionStatus {
+  DRAFT
+  SIGNED
+  BROADCAST
+  CONFIRMED
+  FAILED
+  REPLACED
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum AddressChain {
+  EXTERNAL
+  INTERNAL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(RECIPIENT)
+  signalNumber  String?
+  totpSecret    String?
+  totpEnabled   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  wallets       Wallet[]
+  schedules     PaymentSchedule[]  @relation("ScheduleCreator")
+  expensesSubmitted Expense[]      @relation("ExpenseSubmitter")
+  expensesApproved  Expense[]      @relation("ExpenseApprover")
+  auditLogs     AuditLog[]
+  recipientProfile  RecipientProfile?
+
+  @@map("users")
+}
+
+model Wallet {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String
+  encryptedXpub     String
+  xpubFingerprint   String
+  derivationPath    String   @default("m/86'/0'/0'")
+  nextReceiveIndex  Int      @default(0)
+  nextChangeIndex   Int      @default(0)
+  network           String   @default("mainnet")
+  addressType       String   @default("P2TR")
+  encryptedSeed     String?
+  hasSeed           Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses  Address[]
+  utxos      Utxo[]
+  transactions Transaction[]
+  schedules  PaymentSchedule[]
+
+  @@map("wallets")
+}
+
+model Address {
+  id         String       @id @default(cuid())
+  walletId   String
+  address    String       @unique
+  index      Int
+  chain      AddressChain
+  isUsed     Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+
+  wallet     Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  utxos      Utxo[]
+
+  @@unique([walletId, chain, index])
+  @@map("addresses")
+}
+
+model Utxo {
+  id          String     @id @default(cuid())
+  walletId    String
+  addressId   String
+  txid        String
+  vout        Int
+  valueSats   BigInt
+  status      UtxoStatus @default(UNCONFIRMED)
+  isLocked    Boolean    @default(false)
+  lockedUntil DateTime?
+  scriptPubKey String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  wallet      Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  address     Address    @relation(fields: [addressId], references: [id], onDelete: Cascade)
+
+  @@unique([txid, vout])
+  @@index([walletId, status])
+  @@map("utxos")
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  walletId        String
+  txid            String?           @unique
+  psbt            String?
+  rawHex          String?
+  type            TransactionType
+  status          TransactionStatus @default(DRAFT)
+  amountSats      BigInt
+  feeSats         BigInt?
+  feeRate         Float?
+  recipientAddress String?
+  replacedByTxid  String?
+  rbfEnabled      Boolean          @default(true)
+  confirmations   Int              @default(0)
+  blockHeight     Int?
+  broadcastAt     DateTime?
+  confirmedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  wallet          Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  schedule        PaymentSchedule? @relation(fields: [scheduleId], references: [id])
+  scheduleId      String?
+  expense         Expense?         @relation(fields: [expenseId], references: [id])
+  expenseId       String?
+
+  @@index([walletId, status])
+  @@map("transactions")
+}
+
+model RecipientProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  xpub      String
+  network   String   @default("mainnet")
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("recipient_profiles")
+}
+
+model PaymentSchedule {
+  id               String    @id @default(cuid())
+  userId           String
+  walletId         String
+  recipientAddress String?
+  recipientXpub    String?
+  recipientXpubIndex Int     @default(0)
+  recipientName    String?
+  amountSats       BigInt
+  cronExpression   String
+  timezone         String    @default("UTC")
+  maxFeeRate       Float     @default(50)
+  isActive         Boolean   @default(true)
+  encryptedSeed    String?
+  lastRunAt        DateTime?
+  nextRunAt        DateTime?
+  lastError        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation("ScheduleCreator", fields: [userId], references: [id])
+  wallet           Wallet    @relation(fields: [walletId], references: [id])
+  transactions     Transaction[]
+
+  @@map("payment_schedules")
+}
+
+model Expense {
+  id              String        @id @default(cuid())
+  submitterId     String
+  approverId      String?
+  amount          BigInt
+  currency        String        @default("sats")
+  description     String
+  category        String?
+  receiptUrl      String?
+  status          ExpenseStatus @default(PENDING)
+  recipientAddress String
+  paidTxid        String?
+  submittedAt     DateTime      @default(now())
+  reviewedAt      DateTime?
+  paidAt          DateTime?
+
+  submitter       User          @relation("ExpenseSubmitter", fields: [submitterId], references: [id])
+  approver        User?         @relation("ExpenseApprover", fields: [approverId], references: [id])
+  transactions    Transaction[]
+
+  @@index([submitterId, status])
+  @@map("expenses")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

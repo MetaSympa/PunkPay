@@ -1,0 +1,53 @@
+{
+  "name": "punkpay",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "worker": "npx tsx src/workers/index.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.11.1",
+    "@prisma/client": "^6.19.2",
+    "@tanstack/react-query": "^5.90.21",
+    "argon2": "^0.44.0",
+    "bip32": "^5.0.1",
+    "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^7.0.1",
+    "bs58check": "^4.0.0",
+    "bullmq": "^5.71.0",
+    "ecpair": "^3.0.1",
+    "next": "16.1.6",
+    "next-auth": "^5.0.0-beta.30",
+    "otpauth": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tiny-secp256k1": "^2.2.4",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "prisma": "^6.19.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
