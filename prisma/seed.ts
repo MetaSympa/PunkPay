@@ -4,7 +4,11 @@ import argon2 from 'argon2';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding database...');
+  if (process.env.NODE_ENV === 'production') {
+    console.error('ERROR: Do not run seed in production!');
+    process.exit(1);
+  }
+  console.log('Seeding database (DEV ONLY)...');
 
   // Create admin user
   const adminPassword = await argon2.hash('Admin@PunkPay2024!', {

@@ -3,8 +3,12 @@ import argon2 from 'argon2';
 import { prisma } from '@/lib/db';
 import { registerSchema } from '@/lib/validation';
 import { createAuditLog } from '@/skills/security/audit-log';
+import { applyRateLimit, AUTH_RATE_LIMIT } from '@/lib/api-utils';
 
 export async function POST(req: NextRequest) {
+  const rateLimited = applyRateLimit(req, 'register', AUTH_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
+
   try {
     const body = await req.json();
     const data = registerSchema.parse(body);

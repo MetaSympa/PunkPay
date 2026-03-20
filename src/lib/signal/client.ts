@@ -31,7 +31,7 @@ export function formatPaymentNotification(
     `Amount: ${amount.toLocaleString()} sats`,
     `To: ${recipient.slice(0, 12)}...${recipient.slice(-8)}`,
     `TxID: ${txid.slice(0, 16)}...`,
-    `Track: https://mempool.space/signet/tx/${txid}`,
+    `Track: https://mempool.space/tx/${txid}`,
   ].join('\n');
 }
 

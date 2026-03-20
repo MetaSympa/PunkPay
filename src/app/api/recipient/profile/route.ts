@@ -3,10 +3,11 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { validateXpub } from '@/lib/bitcoin/hd-wallet';
+import { encrypt, decrypt } from '@/lib/crypto';
 
 const profileSchema = z.object({
   xpub: z.string().min(50, 'Invalid xpub'),
-  network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('signet'),
+  network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('mainnet'),
   label: z.string().max(100).optional(),
 });
 
@@ -33,10 +34,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid xpub for this network' }, { status: 400 });
     }
 
+    // Encrypt xpub at rest — same as wallet xpubs
+    const encryptedXpub = encrypt(data.xpub);
+
     const profile = await prisma.recipientProfile.upsert({
       where: { userId: (session.user as any).id },
-      update: { xpub: data.xpub, network: data.network, label: data.label },
-      create: { userId: (session.user as any).id, xpub: data.xpub, network: data.network, label: data.label },
+      update: { xpub: encryptedXpub, network: data.network, label: data.label },
+      create: { userId: (session.user as any).id, xpub: encryptedXpub, network: data.network, label: data.label },
     });
 
     return NextResponse.json(profile);

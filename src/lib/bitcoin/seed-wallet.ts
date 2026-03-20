@@ -22,8 +22,17 @@ export function validateMnemonic(mnemonic: string): boolean {
 }
 
 /**
+ * Get the correct coin_type for a network per BIP44
+ * mainnet = 0, testnet/signet/regtest = 1
+ */
+function getCoinType(network?: string): number {
+  const net = network || process.env.BITCOIN_NETWORK || 'mainnet';
+  return net === 'mainnet' ? 0 : 1;
+}
+
+/**
  * Derive the BIP86 account-level xpub from a mnemonic
- * Path: m/86'/0'/0'  (coin_type=0 for consistency with app default)
+ * Path: m/86'/coin_type'/0'  where coin_type = 0 (mainnet) or 1 (testnet/signet)
  */
 export async function mnemonicToXpub(
   mnemonic: string,
@@ -31,9 +40,9 @@ export async function mnemonicToXpub(
   passphrase?: string
 ): Promise<string> {
   const net = getNetwork(network);
+  const coinType = getCoinType(network);
   const seed = await bip39.mnemonicToSeed(mnemonic.trim().toLowerCase(), passphrase || '');
   const root = bip32.fromSeed(seed, net);
-  // BIP86: m/86'/0'/0'  — coin_type hardcoded to 0 to match app's derivationPath default
-  const accountNode = root.derivePath("m/86'/0'/0'");
+  const accountNode = root.derivePath(`m/86'/${coinType}'/0'`);
   return accountNode.neutered().toBase58();
 }

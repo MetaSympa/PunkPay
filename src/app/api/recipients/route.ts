@@ -23,7 +23,9 @@ export async function GET() {
     id: r.id,
     userId: r.userId,
     email: r.user.email,
-    xpub: r.xpub,
+    // Never expose full xpub — only fingerprint for identification
+    xpubFingerprint: r.xpub.slice(0, 8) + '...' + r.xpub.slice(-8),
+    hasXpub: true,
     network: r.network,
     label: r.label || r.user.email,
   })));

@@ -90,7 +90,7 @@ export function buildRbfPsbt(
     { address: recipientAddress, valueSats: amountSats },
   ];
 
-  if (change > 546n) { // Dust threshold
+  if (change > 330n) { // Taproot dust threshold (P2TR = 330 sats)
     outputs.push({ address: changeAddress, valueSats: change });
   }
 

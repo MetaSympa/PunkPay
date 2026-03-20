@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const xpub = searchParams.get('xpub');
-  const network = searchParams.get('network') || 'signet';
+  const network = searchParams.get('network') || 'mainnet';
   const index = parseInt(searchParams.get('index') || '0', 10);
 
   if (!xpub) return NextResponse.json({ error: 'xpub required' }, { status: 400 });

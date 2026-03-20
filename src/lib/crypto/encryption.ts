@@ -5,10 +5,22 @@ const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
 
+let _masterKeyCache: Buffer | null = null;
+
 function getMasterKey(): Buffer {
+  if (_masterKeyCache) return _masterKeyCache;
+
   const key = process.env.MASTER_ENCRYPTION_KEY;
   if (!key) throw new Error('MASTER_ENCRYPTION_KEY not set');
-  return Buffer.from(key, 'hex');
+  if (!/^[0-9a-f]{64}$/i.test(key)) {
+    throw new Error('MASTER_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)');
+  }
+  if (key === 'CHANGE_ME_GENERATE_WITH_openssl_rand_hex_32') {
+    throw new Error('MASTER_ENCRYPTION_KEY is still the placeholder — generate a real key with: openssl rand -hex 32');
+  }
+
+  _masterKeyCache = Buffer.from(key, 'hex');
+  return _masterKeyCache;
 }
 
 /**

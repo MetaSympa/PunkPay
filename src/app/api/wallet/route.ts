@@ -108,6 +108,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 });
     }
     console.error('Wallet import error:', error);
-    return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

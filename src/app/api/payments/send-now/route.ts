@@ -7,6 +7,7 @@ import { fetchFeeEstimates, selectUtxos } from '@/lib/bitcoin/utxo';
 import { buildPsbt, calculateFee, serializePsbt } from '@/lib/bitcoin/transaction';
 import { signPsbt, broadcastTx } from '@/lib/bitcoin/signing';
 import { createAuditLog } from '@/skills/security/audit-log';
+import { applyRateLimit, PAYMENT_RATE_LIMIT } from '@/lib/api-utils';
 import { z } from 'zod';
 
 const sendNowSchema = z.object({
@@ -21,6 +22,9 @@ const sendNowSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const rateLimited = applyRateLimit(req, 'send-now', PAYMENT_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
+
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if ((session.user as any).role !== 'PAYER') {
@@ -186,6 +190,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 });
     }
     console.error('Send-now error:', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    // Never expose internal error details to the client
+    const safeMessage = error.message?.includes('Insufficient funds')
+      ? error.message
+      : 'Internal server error';
+    return NextResponse.json({ error: safeMessage }, { status: 500 });
   }
 }

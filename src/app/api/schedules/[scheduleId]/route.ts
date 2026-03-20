@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { z } from 'zod';
+
+const updateScheduleSchema = z.object({
+  isActive: z.boolean().optional(),
+  maxFeeRate: z.number().positive().max(1000).optional(),
+  recipientName: z.string().max(100).optional(),
+}).strict(); // Reject any extra fields
 
 export async function GET(
   req: NextRequest,
@@ -48,12 +55,14 @@ export async function PATCH(
   if (!schedule) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
 
   const body = await req.json();
+  const data = updateScheduleSchema.parse(body);
+
   const updated = await prisma.paymentSchedule.update({
     where: { id: scheduleId },
     data: {
-      isActive: body.isActive,
-      maxFeeRate: body.maxFeeRate,
-      recipientName: body.recipientName,
+      ...(data.isActive !== undefined && { isActive: data.isActive }),
+      ...(data.maxFeeRate !== undefined && { maxFeeRate: data.maxFeeRate }),
+      ...(data.recipientName !== undefined && { recipientName: data.recipientName }),
     },
   });
 

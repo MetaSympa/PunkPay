@@ -19,9 +19,15 @@ export async function DELETE(
   if (!tx) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
   if (tx.status !== 'DRAFT') return NextResponse.json({ error: 'Only DRAFT transactions can be deleted' }, { status: 400 });
 
-  // Unlock any UTXOs that were locked for this transaction
+  // Only unlock UTXOs whose locks have not yet expired (they belong to this tx).
+  // NOTE: In a production system, we'd track which UTXOs belong to which transaction.
+  // For now, only release locks that are still active for this wallet.
   await prisma.utxo.updateMany({
-    where: { walletId: tx.walletId, isLocked: true },
+    where: {
+      walletId: tx.walletId,
+      isLocked: true,
+      lockedUntil: { gt: new Date() },
+    },
     data: { isLocked: false, lockedUntil: null },
   });
 

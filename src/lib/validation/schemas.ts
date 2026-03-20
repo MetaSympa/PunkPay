@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-// Bitcoin address validation (basic pattern check)
-const btcAddressRegex = /^(bc1p|tb1p|bcrt1p)[a-z0-9]{58}$/;
+// Bitcoin address validation — supports P2TR (bc1p) and P2WPKH (bc1q) for mainnet, testnet, regtest
+const btcAddressRegex = /^(bc1[pq]|tb1[pq]|bcrt1[pq])[a-z0-9]{38,64}$/;
 const xpubRegex = /^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,120}$/;
 
 export const loginSchema = z.object({
@@ -23,7 +23,7 @@ export const registerSchema = z.object({
 export const importXpubSchema = z.object({
   name: z.string().min(1).max(100),
   xpub: z.string().regex(xpubRegex, 'Invalid xpub format'),
-  network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('signet'),
+  network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('mainnet'),
   addressType: z.enum(['P2TR', 'P2WPKH']).default('P2TR'),
 });
 

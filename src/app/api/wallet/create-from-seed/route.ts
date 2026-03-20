@@ -10,7 +10,7 @@ import { z } from 'zod';
 const createFromSeedSchema = z.object({
   name: z.string().min(1).max(100),
   mnemonic: z.string().min(1),
-  network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('signet'),
+  network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('mainnet'),
   passphrase: z.string().optional(),
 });
 

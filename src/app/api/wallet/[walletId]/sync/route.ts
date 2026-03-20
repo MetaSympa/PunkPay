@@ -22,26 +22,35 @@ export async function POST(
 
   const baseUrl = getMempoolApiUrl(wallet.network);
 
-  // ── Fetch UTXOs for all addresses in parallel ────────────────────────────
-  const addressResults = await Promise.allSettled(
-    wallet.addresses.map(async (addr) => {
-      const utxos = await fetchUtxos(addr.address, wallet.network);
+  // ── Fetch UTXOs in small batches to avoid mempool.space rate limits ───────
+  const BATCH_SIZE = 5;
+  const addressResults: PromiseSettledResult<{ addr: typeof wallet.addresses[0]; utxos: Awaited<ReturnType<typeof fetchUtxos>>; utxosWithScript: PromiseSettledResult<{ utxo: Awaited<ReturnType<typeof fetchUtxos>>[0]; scriptPubKey: string } | null>[] }>[] = [];
 
-      // Fetch all raw txs for this address's UTXOs in parallel
-      const utxosWithScript = await Promise.allSettled(
-        utxos.map(async (utxo) => {
-          const txRes = await fetch(`${baseUrl}/tx/${utxo.txid}`);
-          if (!txRes.ok) return null;
-          const txData = await txRes.json();
-          const scriptPubKey: string = txData?.vout?.[utxo.vout]?.scriptpubkey;
-          if (!scriptPubKey) return null;
-          return { utxo, scriptPubKey };
-        })
-      );
+  for (let i = 0; i < wallet.addresses.length; i += BATCH_SIZE) {
+    const batch = wallet.addresses.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map(async (addr) => {
+        const utxos = await fetchUtxos(addr.address, wallet.network);
 
-      return { addr, utxos, utxosWithScript };
-    })
-  );
+        const utxosWithScript = await Promise.allSettled(
+          utxos.map(async (utxo) => {
+            const txRes = await fetch(`${baseUrl}/tx/${utxo.txid}`);
+            if (!txRes.ok) return null;
+            const txData = await txRes.json();
+            const scriptPubKey: string = txData?.vout?.[utxo.vout]?.scriptpubkey;
+            if (!scriptPubKey) return null;
+            return { utxo, scriptPubKey };
+          })
+        );
+
+        return { addr, utxos, utxosWithScript };
+      })
+    );
+    addressResults.push(...batchResults);
+    if (i + BATCH_SIZE < wallet.addresses.length) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
 
   // ── Write all results to DB ──────────────────────────────────────────────
   let addressesChecked = 0;

@@ -3,6 +3,7 @@ import BIP32Factory from 'bip32';
 import ECPairFactory from 'ecpair';
 import * as ecc from 'tiny-secp256k1';
 import * as bitcoin from 'bitcoinjs-lib';
+import { randomBytes } from 'crypto';
 import { getNetwork, getMempoolApiUrl } from './networks';
 
 const bip32 = BIP32Factory(ecc);
@@ -28,7 +29,8 @@ export async function signPsbt(
   const net = getNetwork(network);
   const seed = await bip39.mnemonicToSeed(mnemonic);
   const root = bip32.fromSeed(seed, net);
-  const accountPath = addressType === 'P2WPKH' ? "m/84'/0'/0'" : "m/86'/0'/0'";
+  const coinType = network === 'mainnet' ? 0 : 1;
+  const accountPath = addressType === 'P2WPKH' ? `m/84'/${coinType}'/0'` : `m/86'/${coinType}'/0'`;
   const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: net });
 
   for (let i = 0; i < inputPaths.length; i++) {
@@ -53,7 +55,7 @@ export async function signPsbt(
 
       const schnorrSigner = {
         publicKey: tweakedPubKey,
-        signSchnorr: (hash: Buffer) => Buffer.from(ecc.signSchnorr(hash, tweakedPrivKey, Buffer.alloc(32))),
+        signSchnorr: (hash: Buffer) => Buffer.from(ecc.signSchnorr(hash, tweakedPrivKey, randomBytes(32))),
       };
       psbt.signInput(i, schnorrSigner as any);
       psbt.finalizeInput(i);

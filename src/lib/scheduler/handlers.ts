@@ -209,15 +209,30 @@ export async function handleUtxoSync(job: Job<UtxoSyncJobData>): Promise<void> {
 
   const decryptedXpub = decrypt(wallet.encryptedXpub);
 
+  const baseUrl = getMempoolApiUrl(wallet.network);
+
   // Derive and check addresses
   for (const addr of wallet.addresses) {
-    const utxos = await fetchUtxos(addr.address);
+    const utxos = await fetchUtxos(addr.address, wallet.network);
 
     for (const utxo of utxos) {
+      // Fetch the actual scriptPubKey from the transaction output
+      let scriptPubKey = '';
+      try {
+        const txRes = await fetch(`${baseUrl}/tx/${utxo.txid}`);
+        if (txRes.ok) {
+          const txData = await txRes.json();
+          scriptPubKey = txData?.vout?.[utxo.vout]?.scriptpubkey || '';
+        }
+      } catch {
+        // Non-fatal: scriptPubKey will be fetched on retry
+      }
+
       await prisma.utxo.upsert({
         where: { txid_vout: { txid: utxo.txid, vout: utxo.vout } },
         update: {
           status: utxo.status.confirmed ? 'CONFIRMED' : 'UNCONFIRMED',
+          ...(scriptPubKey ? { scriptPubKey } : {}),
         },
         create: {
           walletId,
@@ -226,7 +241,7 @@ export async function handleUtxoSync(job: Job<UtxoSyncJobData>): Promise<void> {
           vout: utxo.vout,
           valueSats: BigInt(utxo.value),
           status: utxo.status.confirmed ? 'CONFIRMED' : 'UNCONFIRMED',
-          scriptPubKey: '', // Would be populated from tx details
+          scriptPubKey,
         },
       });
     }

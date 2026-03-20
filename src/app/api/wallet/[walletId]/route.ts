@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/skills/security/audit-log';
 
 export async function GET(
   req: NextRequest,
@@ -53,6 +54,14 @@ export async function DELETE(
   if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
   await prisma.wallet.delete({ where: { id: walletId } });
+
+  await createAuditLog({
+    userId: (session.user as any).id,
+    action: 'WALLET_DELETED',
+    entity: 'Wallet',
+    entityId: walletId,
+    metadata: { name: wallet.name, fingerprint: wallet.xpubFingerprint },
+  });
 
   return NextResponse.json({ success: true });
 }

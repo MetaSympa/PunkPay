@@ -4,11 +4,29 @@ import { paymentQueue } from '../lib/scheduler/queues';
 import { handlePayment, handleUtxoSync, handleTxMonitor, handleNotification } from '../lib/scheduler/handlers';
 import type { PaymentJobData } from '../lib/scheduler/handlers';
 
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  maxRetriesPerRequest: null as null,
-};
+function parseRedisConnection() {
+  const url = process.env.REDIS_URL;
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      return {
+        host: parsed.hostname || 'localhost',
+        port: parseInt(parsed.port || '6379'),
+        password: parsed.password || undefined,
+        maxRetriesPerRequest: null as null,
+      };
+    } catch {
+      // Fall through to defaults
+    }
+  }
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+    maxRetriesPerRequest: null as null,
+  };
+}
+
+const connection = parseRedisConnection();
 
 console.log('Starting PunkPay workers...');
 
