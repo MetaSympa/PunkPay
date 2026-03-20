@@ -91,25 +91,25 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/wallet"><NeonButton variant="ghost" size="sm">← Back</NeonButton></Link>
-          <div>
-            <GlitchText text={wallet.name.toUpperCase()} as="h1" className="text-2xl font-bold text-neon-green" />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Link href="/wallet"><NeonButton variant="ghost" size="sm">←</NeonButton></Link>
+          <div className="min-w-0 flex-1">
+            <GlitchText text={wallet.name.toUpperCase()} as="h1" className="text-lg sm:text-2xl font-bold text-neon-green truncate" />
             <p className="text-cyber-muted text-xs font-mono mt-0.5">{wallet.xpubFingerprint}</p>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
           {(wallet as any).hasSeed && (
-            <span className="text-xs bg-neon-green/10 text-neon-green border border-neon-green/30 rounded px-2 py-1 font-mono">
-              ⚡ P2TR Hot Wallet
+            <span className="text-xs bg-neon-green/10 text-neon-green border border-neon-green/30 rounded px-2 py-1 font-mono shrink-0 hidden sm:inline">
+              ⚡ Hot
             </span>
           )}
-          <NeonButton variant="amber" size="sm" onClick={handleUnlock} loading={unlocking}>
-            🔓 Unlock UTXOs
-          </NeonButton>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <NeonButton variant="green" size="sm" onClick={handleSync} loading={syncing}>
-            ↺ Sync UTXOs
+            ↺ Sync
+          </NeonButton>
+          <NeonButton variant="amber" size="sm" onClick={handleUnlock} loading={unlocking}>
+            🔓 Unlock
           </NeonButton>
           <NeonButton variant="red" size="sm" onClick={handleDelete} loading={deleteWallet.isPending}>
             Delete
@@ -148,18 +148,18 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
       })()}
 
       {/* Balance + Meta */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <TerminalCard title="total balance">
-          <div className="text-2xl font-mono text-neon-green font-bold">{balanceBtc} <span className="text-sm text-cyber-muted">BTC</span></div>
+          <div className="text-xl sm:text-2xl font-mono text-neon-green font-bold truncate">{balanceBtc} <span className="text-xs sm:text-sm text-cyber-muted">BTC</span></div>
           <div className="text-xs text-cyber-muted mt-1">{Number(wallet.balance).toLocaleString()} sats</div>
         </TerminalCard>
         <TerminalCard title="confirmed">
-          <div className="text-2xl font-mono text-neon-amber font-bold">{confirmedBtc} <span className="text-sm text-cyber-muted">BTC</span></div>
+          <div className="text-xl sm:text-2xl font-mono text-neon-amber font-bold truncate">{confirmedBtc} <span className="text-xs sm:text-sm text-cyber-muted">BTC</span></div>
           <div className="text-xs text-cyber-muted mt-1">{Number(wallet.confirmedBalance).toLocaleString()} sats</div>
         </TerminalCard>
         <TerminalCard title="pending">
-          <div className="text-2xl font-mono text-cyber-text font-bold">
-            {(pendingSats / 1e8).toFixed(8)} <span className="text-sm text-cyber-muted">BTC</span>
+          <div className="text-xl sm:text-2xl font-mono text-cyber-text font-bold truncate">
+            {(pendingSats / 1e8).toFixed(8)} <span className="text-xs sm:text-sm text-cyber-muted">BTC</span>
           </div>
           <div className="text-xs text-cyber-muted mt-1">{pendingSats.toLocaleString()} sats</div>
         </TerminalCard>
@@ -167,7 +167,7 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
 
       {/* Wallet info */}
       <TerminalCard title="wallet info">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm">
           {[
             { label: 'Network', value: wallet.network.toUpperCase(), color: 'text-neon-amber' },
             { label: 'Path', value: wallet.derivationPath, color: 'text-cyber-text' },
@@ -189,21 +189,23 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
         ) : (
           <div className="space-y-2">
             {wallet.utxos.map((u: any) => (
-              <div key={u.id} className="flex items-center justify-between py-2 border-b border-cyber-border last:border-0">
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs px-2 py-0.5 rounded font-mono border ${
-                    u.status === 'CONFIRMED'
-                      ? 'text-neon-green border-neon-green/30 bg-neon-green/5'
-                      : 'text-neon-amber border-neon-amber/30 bg-neon-amber/5'
-                  }`}>{u.status}</span>
-                  {u.isLocked && (
-                    <span className="text-xs px-2 py-0.5 rounded font-mono border text-neon-red border-neon-red/30 bg-neon-red/5">
-                      LOCKED
-                    </span>
-                  )}
-                  <span className="text-xs text-cyber-muted font-mono truncate max-w-[200px]">{u.txid}:{u.vout}</span>
+              <div key={u.id} className="py-2 border-b border-cyber-border last:border-0 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-mono border shrink-0 ${
+                      u.status === 'CONFIRMED'
+                        ? 'text-neon-green border-neon-green/30 bg-neon-green/5'
+                        : 'text-neon-amber border-neon-amber/30 bg-neon-amber/5'
+                    }`}>{u.status}</span>
+                    {u.isLocked && (
+                      <span className="text-xs px-1.5 py-0.5 rounded font-mono border text-neon-red border-neon-red/30 bg-neon-red/5 shrink-0">
+                        LOCKED
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-sm font-mono text-neon-amber font-bold shrink-0">{Number(u.valueSats).toLocaleString()} sats</span>
                 </div>
-                <span className="text-sm font-mono text-neon-amber font-bold">{Number(u.valueSats).toLocaleString()} sats</span>
+                <p className="text-xs text-cyber-muted font-mono truncate">{u.txid}:{u.vout}</p>
               </div>
             ))}
           </div>
@@ -217,13 +219,13 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
             .filter((a: any) => a.chain === 'EXTERNAL')
             .sort((a: any, b: any) => a.index - b.index)
             .map((a: any) => (
-              <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-cyber-border/50 last:border-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-cyber-muted font-mono w-6">#{a.index}</span>
-                  <span className="text-xs text-neon-green font-mono">{a.address}</span>
+              <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-cyber-border/50 last:border-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs text-cyber-muted font-mono w-5 shrink-0">#{a.index}</span>
+                  <span className="text-xs text-neon-green font-mono truncate">{a.address}</span>
                 </div>
                 {a.isUsed && (
-                  <span className="text-xs text-cyber-muted font-mono">used</span>
+                  <span className="text-xs text-cyber-muted font-mono shrink-0">used</span>
                 )}
               </div>
             ))}

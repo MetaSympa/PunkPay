@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
 
 // Payer calls this to list all recipients who have set up a payment profile
 export async function GET() {
@@ -19,14 +20,24 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
   });
 
-  return NextResponse.json(recipients.map(r => ({
-    id: r.id,
-    userId: r.userId,
-    email: r.user.email,
-    // Never expose full xpub — only fingerprint for identification
-    xpubFingerprint: r.xpub.slice(0, 8) + '...' + r.xpub.slice(-8),
-    hasXpub: true,
-    network: r.network,
-    label: r.label || r.user.email,
-  })));
+  return NextResponse.json(recipients.map(r => {
+    // Decrypt xpub — payers need it to derive payment addresses
+    let xpub: string;
+    try {
+      xpub = decrypt(r.xpub);
+    } catch {
+      // Fallback: xpub might be stored unencrypted from before the migration
+      xpub = r.xpub;
+    }
+
+    return {
+      id: r.id,
+      userId: r.userId,
+      email: r.user.email,
+      xpub, // Payers need the full xpub to derive fresh receive addresses
+      xpubFingerprint: xpub.slice(0, 8) + '...' + xpub.slice(-8),
+      network: r.network,
+      label: r.label || r.user.email,
+    };
+  }));
 }

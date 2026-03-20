@@ -13,8 +13,10 @@ import { useAutoSync } from '@/hooks/use-utxo-sync';
 // ─── Frequency presets ────────────────────────────────────────────────────────
 
 const FREQ = [
-  { label: 'Every 10 sec',  cron: '*/10 * * * * *' },
-  { label: 'Every minute',  cron: '* * * * *' },
+  { label: 'Every 10 min',  cron: '*/10 * * * *' },
+  { label: 'Every 20 min',  cron: '*/20 * * * *' },
+  { label: 'Every hour',    cron: '0 * * * *' },
+  { label: 'Every 6 hours', cron: '0 */6 * * *' },
   { label: 'Daily',         cron: '0 0 * * *' },
   { label: 'Weekly',        cron: '0 0 * * 1' },
   { label: 'Biweekly',      cron: '0 0 1,15 * *' },
@@ -64,7 +66,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
     recipientName: '',
     derivedAddress: '',
     amountSats: '',
-    cronExpression: '0 0 1 * *',
+    cronExpression: '*/10 * * * *',
     maxFeeRate: '2',
     requireConfirmedUtxos: true,
   });

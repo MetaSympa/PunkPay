@@ -56,8 +56,8 @@ function DraftModal({ tx, onClose, onBroadcast }: DraftModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="w-full max-w-2xl bg-cyber-surface border border-cyber-border rounded-lg p-6 space-y-5">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="w-full sm:max-w-2xl bg-cyber-surface border border-cyber-border rounded-t-2xl sm:rounded-lg p-4 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h2 className="text-neon-green font-mono font-bold text-lg">⚡ Sign & Broadcast</h2>
           <button onClick={onClose} className="text-cyber-muted hover:text-cyber-text font-mono">✕</button>
@@ -153,9 +153,9 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <GlitchText text="TRANSACTIONS" as="h1" className="text-3xl font-bold text-neon-green" />
-        <p className="text-cyber-muted text-sm mt-1 terminal-prompt">
-          {data?.total || 0} transactions found
+        <h1 className="text-lg font-semibold font-mono text-cyber-text tracking-wide">Transactions</h1>
+        <p className="text-cyber-muted text-xs font-mono mt-0.5">
+          {data?.total || 0} found
         </p>
       </div>
 
@@ -166,7 +166,7 @@ export default function TransactionsPage() {
       )}
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-1.5 flex-wrap">
         {['', 'DRAFT', 'BROADCAST', 'CONFIRMED', 'FAILED'].map(status => (
           <NeonButton
             key={status}
@@ -180,88 +180,82 @@ export default function TransactionsPage() {
       </div>
 
       {/* Transaction List */}
-      <TerminalCard title="transaction log">
-        <div className="space-y-1">
-          {/* Header */}
-          <div className="grid grid-cols-12 gap-2 text-xs text-cyber-muted uppercase tracking-wider pb-2 border-b border-cyber-border font-sans">
-            <div className="col-span-2">Status</div>
-            <div className="col-span-2">Type</div>
-            <div className="col-span-3">Amount</div>
-            <div className="col-span-3">Recipient</div>
-            <div className="col-span-2">Date</div>
-          </div>
-
-          {data?.transactions?.map(tx => (
-            <div key={tx.id} className="space-y-0">
-              <div className="grid grid-cols-12 gap-2 py-2 border-b border-cyber-border/20 hover:bg-cyber-card/30 transition-colors text-sm items-center">
-                <div className="col-span-2">
-                  <span className={`text-xs px-2 py-0.5 rounded border ${STATUS_COLORS[(tx as any).status] || ''}`}>
-                    {(tx as any).status}
-                  </span>
-                </div>
-                <div className="col-span-2 text-cyber-text font-mono">{(tx as any).type}</div>
-                <div className="col-span-3 font-mono">
+      {/* Transaction List */}
+      <div className="space-y-3">
+        {data?.transactions?.map(tx => (
+          <div key={tx.id} className="pp-card overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`text-xs px-2 py-0.5 rounded border shrink-0 ${STATUS_COLORS[(tx as any).status] || ''}`}>
+                  {(tx as any).status}
+                </span>
+                <span className="text-xs font-mono text-cyber-muted shrink-0">{(tx as any).type}</span>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="font-mono text-sm">
                   <span className="text-neon-amber">{BigInt(tx.amountSats).toLocaleString()}</span>
                   <span className="text-cyber-muted text-xs ml-1">sats</span>
-                  {tx.feeSats && (
-                    <span className="text-cyber-muted text-xs ml-2">
-                      (fee: {BigInt(tx.feeSats).toLocaleString()})
-                    </span>
-                  )}
-                </div>
-                <div className="col-span-3 font-mono text-xs text-cyber-muted truncate">
-                  {(tx as any).recipientAddress || '—'}
-                </div>
-                <div className="col-span-2 text-xs text-cyber-muted flex items-center gap-1">
-                  <span>⏱</span>
-                  <span>{new Date((tx as any).createdAt).toLocaleDateString()}</span>
-                </div>
+                </p>
+                {tx.feeSats && (
+                  <p className="text-cyber-muted text-xs font-mono">fee: {BigInt(tx.feeSats).toLocaleString()}</p>
+                )}
               </div>
+            </div>
 
-              {/* DRAFT action row */}
-              {(tx as any).status === 'DRAFT' && (
-                <div className="px-2 py-1.5 bg-neon-amber/5 border-b border-cyber-border/20 flex items-center gap-3">
-                  <span className="text-xs text-cyber-muted font-mono">
-                    ⚠ Unsigned — sign in Sparrow then broadcast
-                  </span>
+            <div className="px-4 pb-3 space-y-1.5">
+              {(tx as any).recipientAddress && (
+                <p className="text-xs font-mono text-cyber-muted truncate">
+                  To: {(tx as any).recipientAddress}
+                </p>
+              )}
+              <p className="text-xs text-cyber-muted font-mono">
+                {new Date((tx as any).createdAt).toLocaleString()}
+                {(tx as any).wallet?.name && <span> · {(tx as any).wallet.name}</span>}
+              </p>
+            </div>
+
+            {/* DRAFT action row */}
+            {(tx as any).status === 'DRAFT' && (
+              <div className="px-4 py-2.5 bg-neon-amber/5 border-t border-cyber-border/30 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-cyber-muted font-mono">⚠ Unsigned</span>
+                <div className="flex gap-2 ml-auto">
                   <NeonButton variant="amber" size="sm" onClick={() => setSelectedDraft(tx)}>
                     Sign & Broadcast
                   </NeonButton>
                   <NeonButton
-                    variant="red"
-                    size="sm"
+                    variant="red" size="sm"
                     loading={deletingId === (tx as any).id}
                     onClick={() => handleDelete((tx as any).id)}
                   >
                     Delete
                   </NeonButton>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* BROADCAST/CONFIRMED txid row */}
-              {((tx as any).status === 'BROADCAST' || (tx as any).status === 'CONFIRMED') && (tx as any).txid && (
-                <div className="px-2 py-1.5 border-b border-cyber-border/20">
-                  <span className="text-xs text-cyber-muted font-mono">txid: </span>
-                  <a
-                    href={`https://mempool.space/tx/${(tx as any).txid}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-neon-green font-mono hover:underline break-all"
-                  >
-                    {(tx as any).txid}
-                  </a>
-                </div>
-              )}
-            </div>
-          ))}
+            {/* BROADCAST/CONFIRMED txid row */}
+            {((tx as any).status === 'BROADCAST' || (tx as any).status === 'CONFIRMED') && (tx as any).txid && (
+              <div className="px-4 py-2 border-t border-cyber-border/30">
+                <span className="text-xs text-cyber-muted font-mono">txid: </span>
+                <a
+                  href={`https://mempool.space/tx/${(tx as any).txid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-neon-green font-mono hover:underline break-all"
+                >
+                  {(tx as any).txid}
+                </a>
+              </div>
+            )}
+          </div>
+        ))}
 
-          {data?.transactions?.length === 0 && (
-            <div className="text-center py-8 text-cyber-muted">
-              No transactions found
-            </div>
-          )}
-        </div>
-      </TerminalCard>
+        {data?.transactions?.length === 0 && (
+          <div className="pp-card px-4 py-8 text-center text-cyber-muted font-mono text-sm">
+            No transactions found
+          </div>
+        )}
+      </div>
 
       {selectedDraft && (
         <DraftModal
