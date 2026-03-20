@@ -24,8 +24,8 @@ export function getMempoolApiUrl(network?: string): string {
   switch (net) {
     case 'mainnet': return 'https://mempool.space/api';
     case 'testnet': return 'https://mempool.space/testnet/api';
+    case 'signet':  return 'https://mempool.space/signet/api';
     case 'regtest': return 'http://localhost:3000/api';
-    case 'signet':
     default:        return 'https://mempool.space/api';
   }
 }

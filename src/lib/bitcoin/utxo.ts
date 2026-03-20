@@ -21,12 +21,19 @@ export interface FeeEstimate {
 }
 
 /**
+ * Shared fetch options to bypass Next.js server-side caching.
+ * Next.js App Router caches fetch() by default — without this,
+ * mempool.space responses get cached and return stale (empty) UTXO data.
+ */
+const NO_CACHE: RequestInit = { cache: 'no-store' };
+
+/**
  * Fetch UTXOs for an address from mempool.space (with 8s timeout)
  */
 export async function fetchUtxos(address: string, network?: string): Promise<MempoolUtxo[]> {
   const url = `${getMempoolApiUrl(network)}/address/${address}/utxo`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(`Failed to fetch UTXOs: ${res.statusText}`);
+  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`Failed to fetch UTXOs for ${address}: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
@@ -35,7 +42,7 @@ export async function fetchUtxos(address: string, network?: string): Promise<Mem
  */
 export async function fetchFeeEstimates(network?: string): Promise<FeeEstimate> {
   const url = `${getMempoolApiUrl(network)}/v1/fees/recommended`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch fee estimates: ${res.statusText}`);
   return res.json();
 }
@@ -45,7 +52,7 @@ export async function fetchFeeEstimates(network?: string): Promise<FeeEstimate> 
  */
 export async function fetchTransaction(txid: string, network?: string): Promise<any> {
   const url = `${getMempoolApiUrl(network)}/tx/${txid}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch transaction: ${res.statusText}`);
   return res.json();
 }
@@ -60,7 +67,7 @@ export async function fetchTransactionStatus(txid: string, network?: string): Pr
   block_time?: number;
 }> {
   const url = `${getMempoolApiUrl(network)}/tx/${txid}/status`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch tx status: ${res.statusText}`);
   return res.json();
 }
@@ -71,6 +78,7 @@ export async function fetchTransactionStatus(txid: string, network?: string): Pr
 export async function broadcastTransaction(rawHex: string, network?: string): Promise<string> {
   const url = `${getMempoolApiUrl(network)}/tx`;
   const res = await fetch(url, {
+    ...NO_CACHE,
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: rawHex,

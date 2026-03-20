@@ -1,6 +1,6 @@
 export function AsciiLogo({ className = '' }: { className?: string }) {
   return (
-    <pre className={`text-neon-green text-xs leading-tight ${className}`}>
+    <pre className={`text-neon-green text-xs leading-tight font-mono ${className}`}>
 {`
  ██████╗ ██╗   ██╗███╗   ██╗██╗  ██╗
  ██╔══██╗██║   ██║████╗  ██║██║ ██╔╝

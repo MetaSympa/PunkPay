@@ -8,10 +8,7 @@ interface GlitchTextProps {
 
 export function GlitchText({ text, className = '', as: Tag = 'span' }: GlitchTextProps) {
   return (
-    <Tag
-      className={`relative inline-block glitch ${className}`}
-      data-text={text}
-    >
+    <Tag className={`relative inline-block font-mono font-bold tracking-tight ${className}`}>
       {text}
     </Tag>
   );

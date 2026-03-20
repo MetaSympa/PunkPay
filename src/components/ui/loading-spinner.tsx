@@ -2,19 +2,18 @@
 
 import { useEffect, useState } from 'react';
 
-export function LoadingSpinner({ text = 'Loading' }: { text?: string }) {
-  const [frame, setFrame] = useState(0);
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+export function LoadingSpinner({ text = 'LOADING' }: { text?: string }) {
+  const [dots, setDots] = useState('');
 
   useEffect(() => {
-    const timer = setInterval(() => setFrame(f => (f + 1) % frames.length), 80);
+    const timer = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 400);
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <div className="flex items-center gap-2 text-neon-green font-mono">
-      <span>{frames[frame]}</span>
-      <span>{text}...</span>
+    <div className="flex items-center gap-3 text-neon-green font-mono text-sm">
+      <div className="w-4 h-4 border-2 border-neon-green border-t-transparent rounded-full animate-spin" />
+      <span className="tracking-wider">{text}{dots}</span>
     </div>
   );
 }

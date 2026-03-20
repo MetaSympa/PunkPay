@@ -13,31 +13,52 @@ export async function GET() {
     return NextResponse.json({ error: 'Only payers can list recipients' }, { status: 403 });
   }
 
-  const recipients = await prisma.recipientProfile.findMany({
-    include: {
-      user: { select: { id: true, email: true } },
+  // Fetch ALL users with RECIPIENT role, plus their profile if it exists
+  const recipientUsers = await prisma.user.findMany({
+    where: { role: 'RECIPIENT' },
+    select: {
+      id: true,
+      email: true,
+      recipientProfile: true,
     },
     orderBy: { createdAt: 'desc' },
   });
 
-  return NextResponse.json(recipients.map(r => {
+  return NextResponse.json(recipientUsers.map(u => {
+    const profile = u.recipientProfile;
+
+    if (!profile) {
+      // Recipient exists but hasn't set up a payment profile yet
+      return {
+        id: u.id, // use the user id as fallback
+        userId: u.id,
+        email: u.email,
+        xpub: null,
+        xpubFingerprint: null,
+        network: null,
+        label: u.email,
+        profileComplete: false,
+      };
+    }
+
     // Decrypt xpub — payers need it to derive payment addresses
     let xpub: string;
     try {
-      xpub = decrypt(r.xpub);
+      xpub = decrypt(profile.xpub);
     } catch {
       // Fallback: xpub might be stored unencrypted from before the migration
-      xpub = r.xpub;
+      xpub = profile.xpub;
     }
 
     return {
-      id: r.id,
-      userId: r.userId,
-      email: r.user.email,
+      id: profile.id,
+      userId: u.id,
+      email: u.email,
       xpub, // Payers need the full xpub to derive fresh receive addresses
       xpubFingerprint: xpub.slice(0, 8) + '...' + xpub.slice(-8),
-      network: r.network,
-      label: r.label || r.user.email,
+      network: profile.network,
+      label: profile.label || u.email,
+      profileComplete: true,
     };
   }));
 }

@@ -155,12 +155,24 @@ export function ScheduleForm({ onSuccess }: ScheduleFormProps) {
               required={mode === 'xpub-select'}
             >
               <option value="">Choose recipient...</option>
-              {recipients?.map((r: any) => (
+              {recipients?.filter((r: any) => r.profileComplete).map((r: any) => (
                 <option key={r.id} value={r.id}>{r.label || r.email}</option>
               ))}
             </select>
             {recipients?.length === 0 && (
-              <p className="text-xs text-neon-amber mt-1">No recipients have set up a payment profile yet.</p>
+              <p className="text-xs text-neon-amber mt-1">No recipients registered yet.</p>
+            )}
+            {recipients?.length > 0 && recipients?.every((r: any) => !r.profileComplete) && (
+              <p className="text-xs text-neon-amber mt-1">⚠ All recipients are pending profile setup (xpub required).</p>
+            )}
+            {recipients?.some((r: any) => !r.profileComplete) && (
+              <div className="mt-2 space-y-1">
+                {recipients?.filter((r: any) => !r.profileComplete).map((r: any) => (
+                  <p key={r.userId} className="text-xs text-cyber-muted font-mono">
+                    <span className="text-neon-red">●</span> {r.email} — awaiting xpub setup
+                  </p>
+                ))}
+              </div>
             )}
           </div>
         )}

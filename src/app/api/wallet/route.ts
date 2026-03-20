@@ -23,10 +23,26 @@ export async function GET() {
       addressType: true,
       createdAt: true,
       _count: { select: { addresses: true, utxos: { where: { status: { in: ['CONFIRMED', 'UNCONFIRMED'] } } } } },
+      utxos: {
+        where: { status: { in: ['CONFIRMED', 'UNCONFIRMED'] } },
+        select: { valueSats: true, status: true },
+      },
     },
   });
 
-  return NextResponse.json(wallets);
+  const result = wallets.map(({ utxos, ...wallet }) => {
+    const balance = utxos.reduce((sum, u) => sum + u.valueSats, 0n);
+    const confirmedBalance = utxos
+      .filter(u => u.status === 'CONFIRMED')
+      .reduce((sum, u) => sum + u.valueSats, 0n);
+    return {
+      ...wallet,
+      balance: balance.toString(),
+      confirmedBalance: confirmedBalance.toString(),
+    };
+  });
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: NextRequest) {

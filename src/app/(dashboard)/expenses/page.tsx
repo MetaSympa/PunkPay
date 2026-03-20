@@ -6,75 +6,80 @@ import { useExpenses, useApproveExpense, useSubmitExpense } from '@/hooks/use-ex
 import { NeonButton } from '@/components/ui/neon-button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
-const STATUS_COLOR: Record<string, string> = {
-  PENDING:  'text-neon-amber',
-  APPROVED: 'text-neon-green',
-  REJECTED: 'text-neon-red',
-  PAID:     'text-cyber-muted',
+const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
+  PENDING:  { color: 'text-neon-amber', bg: 'bg-neon-amber/10 border-neon-amber/30' },
+  APPROVED: { color: 'text-neon-green',  bg: 'bg-neon-green/10 border-neon-green/30' },
+  REJECTED: { color: 'text-neon-red',    bg: 'bg-neon-red/10 border-neon-red/30' },
+  PAID:     { color: 'text-cyber-muted', bg: 'bg-cyber-muted/10 border-cyber-border' },
 };
 
-// ─── Payer ────────────────────────────────────────────────────────────────────
+/* ── Payer View ───────────────────────────────────────────────────────── */
 
 function PayerExpenses() {
   const { data: expenses, isLoading } = useExpenses();
   const approve = useApproveExpense();
 
-  if (isLoading) return <div className="flex h-64 items-center justify-center"><LoadingSpinner text="Loading" /></div>;
+  if (isLoading) return <div className="flex h-64 items-center justify-center"><LoadingSpinner text="LOADING_CLAIMS" /></div>;
 
   const pending  = expenses?.filter(e => e.status === 'PENDING')  ?? [];
   const reviewed = expenses?.filter(e => e.status !== 'PENDING')  ?? [];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-lg font-semibold font-mono text-cyber-text tracking-wide">Expenses</h1>
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div className="sv-section-header">
+          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">SYSTEM // CLAIMS</p>
+          <h1 className="text-3xl font-mono font-bold text-cyber-text tracking-tight mt-1">EXPENSE_INDEX</h1>
+        </div>
         {pending.length > 0 && (
-          <span className="text-xs font-mono text-neon-amber">{pending.length} pending</span>
+          <span className="text-xs font-mono text-neon-amber border border-neon-amber/30 bg-neon-amber/10 rounded px-2 py-1 tracking-wider">
+            {pending.length} PENDING
+          </span>
         )}
       </div>
 
       {/* Pending */}
       {pending.length > 0 && (
-        <div className="pp-card">
-          <div className="px-4 py-3 border-b border-cyber-border">
-            <span className="text-xs font-mono text-neon-amber uppercase tracking-wider">Pending Approval</span>
+        <div className="sv-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-neon-amber">
+            <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">PENDING_APPROVAL</span>
           </div>
-          <div className="divide-y divide-cyber-border/40">
+          <div className="divide-y divide-cyber-border/30">
             {pending.map(exp => (
-              <div key={exp.id} className="p-4 space-y-3">
+              <div key={exp.id} className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-mono text-sm text-cyber-text">{exp.description}</p>
-                    <p className="text-xs font-mono text-cyber-muted mt-0.5">{exp.submitter.email}</p>
+                    <p className="font-mono text-sm text-cyber-text font-semibold">{exp.description}</p>
+                    <p className="text-[10px] font-mono text-cyber-muted mt-0.5">{exp.submitter.email}</p>
                     {exp.category && (
-                      <span className="inline-block mt-1 text-xs font-mono text-cyber-muted border border-cyber-border rounded px-1.5 py-0.5">
-                        {exp.category}
+                      <span className="inline-block mt-1 text-[10px] font-mono text-cyber-muted border border-cyber-border rounded px-1.5 py-0.5 tracking-wider">
+                        {exp.category.toUpperCase()}
                       </span>
                     )}
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-mono text-base font-semibold text-neon-amber">
+                    <p className="font-mono text-xl font-bold text-neon-amber">
                       {BigInt(exp.amount).toLocaleString()}
                     </p>
-                    <p className="text-xs font-mono text-cyber-muted">sats</p>
-                    <p className="text-xs font-mono text-cyber-muted mt-1">{new Date(exp.submittedAt).toLocaleDateString()}</p>
+                    <p className="text-[10px] font-mono text-cyber-muted tracking-wider">SATS</p>
+                    <p className="text-[10px] font-mono text-cyber-muted mt-1">{new Date(exp.submittedAt).toLocaleDateString()}</p>
                   </div>
                 </div>
                 {exp.recipientAddress && (
-                  <p className="text-xs font-mono text-cyber-muted break-all bg-cyber-bg rounded px-2 py-1">
+                  <p className="text-xs font-mono text-cyber-muted break-all bg-cyber-bg rounded px-2 py-1.5 border border-cyber-border/50">
                     {exp.recipientAddress}
                   </p>
                 )}
                 <div className="flex gap-2">
-                  <NeonButton variant="green" size="sm"
+                  <NeonButton variant="primary" size="sm"
                     loading={approve.isPending}
                     onClick={() => approve.mutate({ expenseId: exp.id, action: 'approve' })}>
-                    Approve
+                    APPROVE
                   </NeonButton>
                   <NeonButton variant="red" size="sm"
                     loading={approve.isPending}
                     onClick={() => approve.mutate({ expenseId: exp.id, action: 'reject' })}>
-                    Reject
+                    REJECT
                   </NeonButton>
                 </div>
               </div>
@@ -84,30 +89,33 @@ function PayerExpenses() {
       )}
 
       {/* History */}
-      <div className="pp-card">
-        <div className="px-4 py-3 border-b border-cyber-border">
-          <span className="text-xs font-mono text-cyber-muted uppercase tracking-wider">History</span>
+      <div className="sv-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-cyber-border">
+          <span className="text-[11px] font-mono text-cyber-muted uppercase tracking-[0.15em]">HISTORY</span>
         </div>
         {reviewed.length === 0 ? (
-          <p className="px-4 py-6 text-center text-xs font-mono text-cyber-muted">
-            {expenses?.length === 0 ? 'No expenses yet' : 'No reviewed expenses'}
+          <p className="px-4 py-8 text-center text-xs font-mono text-cyber-muted">
+            {expenses?.length === 0 ? 'NO_EXPENSES_FOUND' : 'NO_REVIEWED_EXPENSES'}
           </p>
         ) : (
-          <div className="divide-y divide-cyber-border/30">
-            {reviewed.map(exp => (
-              <div key={exp.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono text-cyber-text truncate">{exp.description}</p>
-                  <p className="text-xs font-mono text-cyber-muted">{exp.submitter.email}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-mono text-neon-amber">{BigInt(exp.amount).toLocaleString()} sats</p>
-                  <span className={`text-xs font-mono ${STATUS_COLOR[exp.status] || 'text-cyber-muted'}`}>
+          <div className="divide-y divide-cyber-border/20">
+            {reviewed.map(exp => {
+              const st = STATUS_COLOR[exp.status] || STATUS_COLOR.PAID;
+              return (
+                <div key={exp.id} className="flex items-center gap-3 px-4 py-3.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono text-cyber-text truncate">{exp.description}</p>
+                    <p className="text-[10px] font-mono text-cyber-muted">{exp.submitter.email}</p>
+                  </div>
+                  <p className="text-sm font-mono text-neon-amber font-semibold shrink-0">
+                    {BigInt(exp.amount).toLocaleString()} <span className="text-[10px] font-normal text-cyber-muted">SATS</span>
+                  </p>
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border shrink-0 ${st.color} ${st.bg} tracking-wider`}>
                     {exp.status}
                   </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -115,7 +123,7 @@ function PayerExpenses() {
   );
 }
 
-// ─── Recipient ────────────────────────────────────────────────────────────────
+/* ── Recipient View ───────────────────────────────────────────────────── */
 
 function RecipientExpenses() {
   const { data: expenses, isLoading } = useExpenses();
@@ -133,80 +141,83 @@ function RecipientExpenses() {
     } catch (err: any) { setError(err.message); }
   }
 
-  if (isLoading) return <div className="flex h-64 items-center justify-center"><LoadingSpinner text="Loading" /></div>;
+  if (isLoading) return <div className="flex h-64 items-center justify-center"><LoadingSpinner text="LOADING_CLAIMS" /></div>;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold font-mono text-cyber-text tracking-wide">Expenses</h1>
-        <NeonButton variant="amber" size="sm" onClick={() => { setShowForm(v => !v); setError(''); }}>
-          {showForm ? 'Cancel' : 'New Claim'}
+        <div className="sv-section-header">
+          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">SYSTEM // CLAIMS</p>
+          <h1 className="text-3xl font-mono font-bold text-cyber-text tracking-tight mt-1">MY_CLAIMS</h1>
+        </div>
+        <NeonButton variant="primary" size="sm" onClick={() => { setShowForm(v => !v); setError(''); }}>
+          {showForm ? 'CANCEL' : '+ NEW CLAIM'}
         </NeonButton>
       </div>
 
-      {/* Submit form */}
       {showForm && (
-        <div className="pp-card">
-          <div className="px-4 py-3 border-b border-cyber-border">
-            <span className="text-xs font-mono text-neon-amber uppercase tracking-wider">Submit Expense</span>
+        <div className="sv-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-neon-amber">
+            <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">SUBMIT_EXPENSE</span>
           </div>
-          <form onSubmit={handleSubmit} className="p-4 space-y-3">
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="pp-label">Amount (sats)</label>
+                <label className="sv-label">AMOUNT (SATS)</label>
                 <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  className="pp-input" placeholder="50000" required />
+                  className="sv-input" placeholder="50000" required />
               </div>
               <div>
-                <label className="pp-label">Category</label>
+                <label className="sv-label">CATEGORY</label>
                 <input type="text" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  className="pp-input" placeholder="e.g. design" />
+                  className="sv-input" placeholder="e.g. design" />
               </div>
             </div>
             <div>
-              <label className="pp-label">Description</label>
+              <label className="sv-label">DESCRIPTION</label>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                className="pp-input h-16 resize-none" required />
+                className="sv-input h-16 resize-none" required />
             </div>
             <div>
-              <label className="pp-label">Your P2TR Address</label>
+              <label className="sv-label">YOUR_P2TR_ADDRESS</label>
               <input type="text" value={form.recipientAddress} onChange={e => setForm(f => ({ ...f, recipientAddress: e.target.value }))}
-                className="pp-input" placeholder="bc1p..." required />
+                className="sv-input text-neon-green" placeholder="bc1p..." required />
             </div>
-            {error && (
-              <p className="text-xs font-mono text-neon-red bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2">{error}</p>
-            )}
-            <NeonButton type="submit" variant="amber" className="w-full" loading={submit.isPending}>
-              Submit Claim
+            {error && <div className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2">[ERROR] {error}</div>}
+            <NeonButton type="submit" variant="primary" className="w-full" loading={submit.isPending}>
+              SUBMIT CLAIM
             </NeonButton>
           </form>
         </div>
       )}
 
-      {/* Expense list */}
-      <div className="pp-card">
-        <div className="px-4 py-3 border-b border-cyber-border">
-          <span className="text-xs font-mono text-cyber-muted uppercase tracking-wider">History</span>
+      {/* History */}
+      <div className="sv-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-cyber-border">
+          <span className="text-[11px] font-mono text-cyber-muted uppercase tracking-[0.15em]">HISTORY</span>
         </div>
         {!expenses?.length ? (
-          <p className="px-4 py-6 text-center text-xs font-mono text-cyber-muted">No expenses submitted yet</p>
+          <p className="px-4 py-8 text-center text-xs font-mono text-cyber-muted">NO_EXPENSES_SUBMITTED</p>
         ) : (
-          <div className="divide-y divide-cyber-border/30">
-            {expenses.map(exp => (
-              <div key={exp.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono text-cyber-text truncate">{exp.description}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-xs font-mono ${STATUS_COLOR[exp.status] || 'text-cyber-muted'}`}>{exp.status}</span>
-                    {exp.category && <span className="text-xs font-mono text-cyber-muted">{exp.category}</span>}
+          <div className="divide-y divide-cyber-border/20">
+            {expenses.map(exp => {
+              const st = STATUS_COLOR[exp.status] || STATUS_COLOR.PAID;
+              return (
+                <div key={exp.id} className="flex items-center gap-3 px-4 py-3.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono text-cyber-text truncate">{exp.description}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${st.color} ${st.bg} tracking-wider`}>{exp.status}</span>
+                      {exp.category && <span className="text-[10px] font-mono text-cyber-muted">{exp.category.toUpperCase()}</span>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-mono text-neon-amber font-semibold">{Number(exp.amount).toLocaleString()} <span className="text-[10px] font-normal text-cyber-muted">SATS</span></p>
+                    <p className="text-[10px] font-mono text-cyber-muted/60">{new Date(exp.submittedAt).toLocaleDateString()}</p>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-mono text-neon-amber">{Number(exp.amount).toLocaleString()} sats</p>
-                  <p className="text-xs font-mono text-cyber-muted/60">{new Date(exp.submittedAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -214,7 +225,7 @@ function RecipientExpenses() {
   );
 }
 
-// ─── Root ─────────────────────────────────────────────────────────────────────
+/* ── Root ──────────────────────────────────────────────────────────────── */
 
 export default function ExpensesPage() {
   const { data: session } = useSession();

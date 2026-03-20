@@ -171,7 +171,8 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
             utxos,
             hasActivity,
           };
-        } catch {
+        } catch (err) {
+          console.warn(`[sync] Failed to fetch UTXOs for ${addr.address} (index ${addr.index}):`, err instanceof Error ? err.message : err);
           return {
             addressId: addr.id,
             address: addr.address,

@@ -4,33 +4,83 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { redirect } from 'next/navigation';
-import { useTheme } from '@/lib/theme-context';
+import { useState, useEffect } from 'react';
+
+/* ── Nav icons (inline SVG for each tab) ─────────────────────────────── */
+
+function IconTerminal({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  );
+}
+
+function IconNodes({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
+    </svg>
+  );
+}
+
+function IconAutoPay({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+    </svg>
+  );
+}
+
+function IconLogs({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function IconExpenses({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  );
+}
+
+/* ── Layout config ────────────────────────────────────────────────────── */
 
 const payerNav = [
-  { href: '/overview',      label: 'Overview' },
-  { href: '/wallet',        label: 'Wallets' },
-  { href: '/schedules',     label: 'Payments' },
-  { href: '/expenses',      label: 'Expenses' },
-  { href: '/transactions',  label: 'Txns' },
+  { href: '/overview',      label: 'TERMINAL',  icon: IconTerminal },
+  { href: '/wallet',        label: 'NODES',     icon: IconNodes },
+  { href: '/schedules',     label: 'AUTOPAY',   icon: IconAutoPay },
+  { href: '/expenses',      label: 'CLAIMS',    icon: IconExpenses },
+  { href: '/transactions',  label: 'LOGS',      icon: IconLogs },
 ];
 
 const recipientNav = [
-  { href: '/overview',  label: 'Overview' },
-  { href: '/wallet',    label: 'Wallets' },
-  { href: '/expenses',  label: 'Expenses' },
+  { href: '/overview',  label: 'TERMINAL',  icon: IconTerminal },
+  { href: '/wallet',    label: 'NODES',     icon: IconNodes },
+  { href: '/expenses',  label: 'CLAIMS',    icon: IconExpenses },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
-  const { theme, toggle } = useTheme();
+  const [latency, setLatency] = useState(14);
   const role = (session?.user as any)?.role;
   const navItems = role === 'RECIPIENT' ? recipientNav : payerNav;
+
+  // Simulate latency ping
+  useEffect(() => {
+    const id = setInterval(() => setLatency(Math.floor(8 + Math.random() * 20)), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   if (status === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <span className="text-cyber-muted font-mono text-sm animate-pulse">Loading...</span>
+        <span className="text-neon-green font-mono text-sm animate-pulse">INITIALIZING_SYSTEM...</span>
       </div>
     );
   }
@@ -40,105 +90,70 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-cyber-bg">
-
-      {/* ── Desktop sidebar ───────────────────────────────────────────── */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-48 flex-col border-r border-cyber-border bg-cyber-surface z-20">
-        <div className="px-4 py-5 border-b border-cyber-border">
-          <span className="text-cyber-text font-mono font-semibold tracking-widest text-sm">
-            PUNKPAY
-          </span>
-          <p className="text-cyber-muted text-xs mt-0.5 font-mono">v0.1</p>
-        </div>
-
-        <nav className="flex-1 py-3 px-2 space-y-0.5">
-          {navItems.map(item => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`block px-3 py-2 rounded text-sm font-mono transition-colors ${
-                  isActive
-                    ? 'bg-neon-green/8 text-neon-green'
-                    : 'text-cyber-muted hover:text-cyber-text hover:bg-cyber-card'
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="px-4 py-4 border-t border-cyber-border space-y-3">
-          <div>
-            <p className="text-xs text-cyber-muted font-mono truncate">{session.user?.email}</p>
-            <p className="text-xs text-neon-amber font-mono mt-0.5">{role}</p>
+    <div className="min-h-screen bg-cyber-bg flex flex-col">
+      {/* ── Top status bar ────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-30 border-b border-cyber-border bg-cyber-surface/95 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 py-3 max-w-6xl mx-auto">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full border-2 border-neon-green flex items-center justify-center">
+              <span className="text-neon-green text-[10px] font-bold">₿</span>
+            </div>
+            <span className="text-neon-green font-mono font-semibold text-sm tracking-wider">
+              PUNKPAY_V0.1
+            </span>
           </div>
-          <button
-            onClick={toggle}
-            className="w-full text-left text-xs text-cyber-muted hover:text-cyber-text font-mono transition-colors py-0.5"
-          >
-            {theme === 'grain' ? 'Light mode' : 'Dark mode'}
-          </button>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="w-full text-left text-xs text-cyber-muted hover:text-neon-red font-mono transition-colors py-0.5"
-          >
-            Sign out
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Main content ─────────────────────────────────────────────── */}
-      <main className="flex-1 lg:ml-48 pb-20 lg:pb-0 min-h-screen">
-        {/* Mobile top bar */}
-        <div className="lg:hidden sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-cyber-border bg-cyber-surface/95 backdrop-blur-sm">
-          <span className="text-cyber-text font-mono font-semibold tracking-widest text-sm">PUNKPAY</span>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggle}
-              className="text-xs text-cyber-muted hover:text-cyber-text font-mono transition-colors"
-            >
-              {theme === 'grain' ? 'Light' : 'Dark'}
-            </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-mono text-cyber-muted hidden sm:block">
+              SYSTEM_HEALTH: <span className="text-neon-green">OPTIMAL</span>
+            </span>
+            <span className="text-xs font-mono text-neon-amber hidden sm:block">
+              LATENCY: {latency}MS
+            </span>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
-              className="text-xs text-cyber-muted hover:text-neon-red font-mono transition-colors"
+              className="text-cyber-muted hover:text-neon-red font-mono text-xs transition-colors"
+              title="Sign out"
             >
-              Out
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="5" cy="6" r="1.5" /><circle cx="12" cy="6" r="1.5" /><circle cx="19" cy="6" r="1.5" />
+                <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                <circle cx="5" cy="18" r="1.5" /><circle cx="12" cy="18" r="1.5" /><circle cx="19" cy="18" r="1.5" />
+              </svg>
             </button>
           </div>
         </div>
+      </header>
 
-        <div className="px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6 max-w-3xl mx-auto">
+      {/* ── Main content ─────────────────────────────────────────────── */}
+      <main className="flex-1 pb-24">
+        <div className="px-4 py-5 sm:px-6 sm:py-6 max-w-6xl mx-auto">
           {children}
         </div>
       </main>
 
-      {/* ── Mobile bottom nav ─────────────────────────────────────────── */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-20 border-t border-cyber-border bg-cyber-surface/95 backdrop-blur-sm">
-        <div className="flex">
+      {/* ── Bottom nav (Sovereign-style) ──────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-cyber-border bg-cyber-surface/95 backdrop-blur-sm">
+        <div className="flex max-w-6xl mx-auto">
           {navItems.map(item => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 py-3 text-center text-xs font-mono transition-colors ${
+                className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all duration-200 ${
                   isActive
-                    ? 'text-neon-green'
+                    ? 'sv-nav-active rounded-lg mx-1 my-1.5'
                     : 'text-cyber-muted hover:text-cyber-text'
                 }`}
               >
-                <span className={`block w-1 h-1 rounded-full mx-auto mb-1 transition-colors ${isActive ? 'bg-neon-green' : 'bg-transparent'}`} />
-                {item.label}
+                <Icon active={isActive} />
+                <span className="text-[10px] font-mono tracking-wider">{item.label}</span>
               </Link>
             );
           })}
         </div>
       </nav>
-
     </div>
   );
 }
