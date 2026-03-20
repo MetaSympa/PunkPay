@@ -8,7 +8,7 @@ import { deriveAddress, type AddressType } from '../bitcoin/hd-wallet';
 import { syncWalletUtxos } from '../bitcoin/sync';
 import { decrypt } from '../crypto/encryption';
 import { signPsbt, broadcastTx } from '../bitcoin/signing';
-import { sendSignalMessage } from '../signal/client';
+import { sendTelegramMessage } from '../telegram/client';
 
 export interface PaymentJobData {
   scheduleId: string;
@@ -222,7 +222,7 @@ export async function handleUtxoSync(job: Job<UtxoSyncJobData>): Promise<void> {
   });
 
   const result = await syncWalletUtxos(walletId, wallet.network);
-  job.log(`UTXO sync complete — checked ${result.addressesChecked} addresses, found ${result.utxosFound} UTXOs, balance: ${result.totalSats} sats`);
+  job.log(`UTXO sync complete — checked ${result.addressesChecked} addresses, ${result.newUtxos} new UTXOs, ${result.spentUtxos} spent, balance: ${result.totalSats} sats (${result.elapsed}ms)`);
 }
 
 /**
@@ -259,6 +259,6 @@ export async function handleTxMonitor(job: Job<TxMonitorJobData>): Promise<void>
  */
 export async function handleNotification(job: Job<NotificationJobData>): Promise<void> {
   const { recipientNumber, message } = job.data;
-  await sendSignalMessage(recipientNumber, message);
+  await sendTelegramMessage(recipientNumber, message);
   job.log(`Notification sent to ${recipientNumber}`);
 }

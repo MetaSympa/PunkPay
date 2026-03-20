@@ -83,10 +83,9 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: { nextReceiveIndex: 20, nextChangeIndex: 5 },
-    });
+    // nextReceiveIndex stays at 0 — first unused address is the receive address.
+    // nextChangeIndex stays at 0 — change addresses derived on demand.
+    // The pre-derived addresses are just a scan buffer for sync.
 
     await createAuditLog({
       userId,

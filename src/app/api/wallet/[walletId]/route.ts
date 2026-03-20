@@ -15,7 +15,7 @@ export async function GET(
   const wallet = await prisma.wallet.findFirst({
     where: { id: walletId, userId: (session.user as any).id },
     include: {
-      addresses: { orderBy: { index: 'desc' }, take: 20 },
+      addresses: { orderBy: { index: 'asc' } },
       utxos: { where: { status: { in: ['CONFIRMED', 'UNCONFIRMED'] } } },
       _count: { select: { transactions: true } },
     },
@@ -28,13 +28,28 @@ export async function GET(
     .filter(u => u.status === 'CONFIRMED')
     .reduce((sum, u) => sum + u.valueSats, 0n);
 
+  // Determine the current receive address using nextReceiveIndex
+  // This is the first unused address at or after nextReceiveIndex
+  const externalAddrs = wallet.addresses.filter(a => a.chain === 'EXTERNAL');
+  const receiveAddress = externalAddrs.find(a => a.index === wallet.nextReceiveIndex && !a.isUsed)
+    ?? externalAddrs.filter(a => !a.isUsed).sort((a, b) => a.index - b.index)[0]
+    ?? null;
+
   return NextResponse.json({
     ...wallet,
     encryptedXpub: undefined,
     encryptedSeed: undefined,
     balance: balance.toString(),
     confirmedBalance: confirmedBalance.toString(),
-    utxos: wallet.utxos.map(u => ({ ...u, valueSats: u.valueSats.toString(), lockedUntil: u.lockedUntil?.toISOString() ?? null })),
+    receiveAddress: receiveAddress ? {
+      address: receiveAddress.address,
+      index: receiveAddress.index,
+    } : null,
+    utxos: wallet.utxos.map(u => ({
+      ...u,
+      valueSats: u.valueSats.toString(),
+      lockedUntil: u.lockedUntil?.toISOString() ?? null,
+    })),
   });
 }
 

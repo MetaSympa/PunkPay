@@ -21,11 +21,11 @@ export interface FeeEstimate {
 }
 
 /**
- * Fetch UTXOs for an address from mempool.space
+ * Fetch UTXOs for an address from mempool.space (with 8s timeout)
  */
 export async function fetchUtxos(address: string, network?: string): Promise<MempoolUtxo[]> {
   const url = `${getMempoolApiUrl(network)}/address/${address}/utxo`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch UTXOs: ${res.statusText}`);
   return res.json();
 }
@@ -35,7 +35,7 @@ export async function fetchUtxos(address: string, network?: string): Promise<Mem
  */
 export async function fetchFeeEstimates(network?: string): Promise<FeeEstimate> {
   const url = `${getMempoolApiUrl(network)}/v1/fees/recommended`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch fee estimates: ${res.statusText}`);
   return res.json();
 }
@@ -43,9 +43,9 @@ export async function fetchFeeEstimates(network?: string): Promise<FeeEstimate> 
 /**
  * Fetch transaction details
  */
-export async function fetchTransaction(txid: string): Promise<any> {
-  const url = `${getMempoolApiUrl()}/tx/${txid}`;
-  const res = await fetch(url);
+export async function fetchTransaction(txid: string, network?: string): Promise<any> {
+  const url = `${getMempoolApiUrl(network)}/tx/${txid}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch transaction: ${res.statusText}`);
   return res.json();
 }
@@ -53,14 +53,14 @@ export async function fetchTransaction(txid: string): Promise<any> {
 /**
  * Fetch transaction status
  */
-export async function fetchTransactionStatus(txid: string): Promise<{
+export async function fetchTransactionStatus(txid: string, network?: string): Promise<{
   confirmed: boolean;
   block_height?: number;
   block_hash?: string;
   block_time?: number;
 }> {
-  const url = `${getMempoolApiUrl()}/tx/${txid}/status`;
-  const res = await fetch(url);
+  const url = `${getMempoolApiUrl(network)}/tx/${txid}/status`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Failed to fetch tx status: ${res.statusText}`);
   return res.json();
 }
@@ -68,12 +68,13 @@ export async function fetchTransactionStatus(txid: string): Promise<{
 /**
  * Broadcast a raw transaction
  */
-export async function broadcastTransaction(rawHex: string): Promise<string> {
-  const url = `${getMempoolApiUrl()}/tx`;
+export async function broadcastTransaction(rawHex: string, network?: string): Promise<string> {
+  const url = `${getMempoolApiUrl(network)}/tx`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: rawHex,
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     const error = await res.text();

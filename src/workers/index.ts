@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { prisma } from '../lib/db';
 import { paymentQueue } from '../lib/scheduler/queues';

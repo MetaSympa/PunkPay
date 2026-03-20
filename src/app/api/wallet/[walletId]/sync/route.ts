@@ -19,11 +19,20 @@ export async function POST(
 
   if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-  const result = await syncWalletUtxos(walletId, wallet.network);
+  try {
+    const result = await syncWalletUtxos(walletId, wallet.network);
 
-  return NextResponse.json({
-    addressesChecked: result.addressesChecked,
-    utxosFound: result.utxosFound,
-    totalSats: result.totalSats.toString(),
-  });
+    return NextResponse.json({
+      addressesChecked: result.addressesChecked,
+      newUtxos: result.newUtxos,
+      spentUtxos: result.spentUtxos,
+      totalSats: result.totalSats.toString(),
+      confirmedSats: result.confirmedSats.toString(),
+      nextReceiveIndex: result.nextReceiveIndex,
+      elapsed: result.elapsed,
+    });
+  } catch (error: any) {
+    console.error('Sync error:', error);
+    return NextResponse.json({ error: error.message || 'Sync failed' }, { status: 500 });
+  }
 }
