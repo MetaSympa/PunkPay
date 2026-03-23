@@ -88,9 +88,8 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
   const addrType = (wallet.addressType || 'P2TR') as AddressType;
 
   // ── Ensure we have enough pre-derived addresses ─────────────────────────
-  const EXT_GAP_LIMIT = 20;
-  const INT_GAP_LIMIT = 5;
-  const CONCURRENCY = 10;
+  const EXT_GAP_LIMIT = 5;
+  const INT_GAP_LIMIT = 3;
 
   const dbAddresses = await prisma.address.findMany({
     where: { walletId },
@@ -148,45 +147,30 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
     chainType: 'EXTERNAL' | 'INTERNAL',
     gapLimit: number
   ): Promise<AddressScanResult[]> {
-    // Fetch all derived addresses in parallel (chain length is already bounded by
-    // ensureAddresses to highestUsedIdx + gapLimit). Using full CONCURRENCY every
-    // batch avoids the sequential drain that happens when remaining < CONCURRENCY.
-    const allResults = await parallelMap(chain, async (addr) => {
+    // Linear scan: check addresses sequentially, stop after gapLimit consecutive empty
+    const results: AddressScanResult[] = [];
+    let consecutiveEmpty = 0;
+
+    for (const addr of chain) {
       addressesChecked++;
       try {
         const utxos = await fetchUtxos(addr.address, network);
-        return {
-          addressId: addr.id,
-          address: addr.address,
-          index: addr.index,
-          chain: chainType,
-          utxos,
-          hasActivity: utxos.length > 0 || addr.isUsed,
-          scanFailed: false,
-        } satisfies AddressScanResult;
-      } catch (err) {
-        console.warn(`[sync] Failed to fetch UTXOs for ${addr.address} (index ${addr.index}):`, err instanceof Error ? err.message : err);
-        return {
-          addressId: addr.id,
-          address: addr.address,
-          index: addr.index,
-          chain: chainType,
-          utxos: [] as MempoolUtxo[],
-          hasActivity: addr.isUsed,
-          scanFailed: true,
-        } satisfies AddressScanResult;
-      }
-    }, CONCURRENCY);
+        const result: AddressScanResult = {
+          addressId: addr.id, address: addr.address, index: addr.index,
+          chain: chainType, utxos, hasActivity: utxos.length > 0 || addr.isUsed, scanFailed: false,
+        };
+        results.push(result);
 
-    // Trim results to the gap limit window (stop counting after gapLimit consecutive empty)
-    const results: AddressScanResult[] = [];
-    let consecutiveEmpty = 0;
-    for (const result of allResults) {
-      results.push(result);
-      if (result.hasActivity) {
-        consecutiveEmpty = 0;
-      } else if (++consecutiveEmpty >= gapLimit) {
-        break;
+        if (result.hasActivity) { consecutiveEmpty = 0; }
+        else if (++consecutiveEmpty >= gapLimit) { break; }
+      } catch (err) {
+        console.warn(`[sync] Failed ${addr.address} (idx ${addr.index}):`, err instanceof Error ? err.message : err);
+        results.push({
+          addressId: addr.id, address: addr.address, index: addr.index,
+          chain: chainType, utxos: [], hasActivity: addr.isUsed, scanFailed: true,
+        });
+        if (addr.isUsed) { consecutiveEmpty = 0; }
+        else if (++consecutiveEmpty >= gapLimit) { break; }
       }
     }
     return results;
@@ -313,12 +297,13 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
     }).catch(() => {}); // ignore race
   }
 
-  // Update wallet counters (only advance, never go backwards)
+  // Update wallet counters + sync timestamp
   await prisma.wallet.update({
     where: { id: walletId },
     data: {
       nextReceiveIndex: Math.max(nextReceiveIndex, wallet.nextReceiveIndex),
       nextChangeIndex: Math.max(nextChangeIndex, wallet.nextChangeIndex),
+      lastSyncedAt: new Date(),
     },
   });
 

@@ -28,6 +28,7 @@ export function useSchedules() {
       if (!res.ok) throw new Error('Failed to fetch schedules');
       return res.json();
     },
+    refetchInterval: 15_000, // refresh every 15s to pick up nextRunAt updates
   });
 }
 

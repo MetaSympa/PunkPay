@@ -203,7 +203,17 @@ function CreateForm({ onClose }: { onClose: () => void }) {
 
 /* ── Schedule Card ───────────────────────────────────────────────────── */
 
-function useCountdown(targetDate: string | null, isActive: boolean) {
+function formatDuration(ms: number) {
+  const abs = Math.abs(ms);
+  const h = Math.floor(abs / 3_600_000);
+  const m = Math.floor((abs % 3_600_000) / 60_000);
+  const s = Math.floor((abs % 60_000) / 1000);
+  if (h > 0) return `${h}H ${String(m).padStart(2, '0')}M ${String(s).padStart(2, '0')}S`;
+  if (m > 0) return `${m}M ${String(s).padStart(2, '0')}S`;
+  return `${s}S`;
+}
+
+function useCountdown(targetDate: string | null, isActive: boolean): { label: string; state: 'waiting' | 'overdue' | 'halted' } {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!isActive || !targetDate) return;
@@ -211,15 +221,12 @@ function useCountdown(targetDate: string | null, isActive: boolean) {
     return () => clearInterval(id);
   }, [targetDate, isActive]);
 
-  if (!isActive || !targetDate) return null;
+  if (!isActive || !targetDate) return { label: 'HALTED', state: 'halted' };
   const diff = new Date(targetDate).getTime() - now;
-  if (diff <= 0) return 'EXECUTING...';
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor((diff % 3_600_000) / 60_000);
-  const s = Math.floor((diff % 60_000) / 1000);
-  if (h > 0) return `${h}H ${String(m).padStart(2, '0')}M ${String(s).padStart(2, '0')}S`;
-  if (m > 0) return `${m}M ${String(s).padStart(2, '0')}S`;
-  return `${s}S`;
+  if (diff <= 0) {
+    return { label: `EXECUTING · ${formatDuration(diff)} ELAPSED`, state: 'overdue' };
+  }
+  return { label: formatDuration(diff), state: 'waiting' };
 }
 
 function ScheduleCard({ schedule }: { schedule: any }) {
@@ -266,20 +273,24 @@ function ScheduleCard({ schedule }: { schedule: any }) {
         </div>
         <div>
           <p className="sv-stat-label">NEXT_PAYMENT</p>
-          {schedule.isActive && countdown ? (
-            <div className="mt-1">
-              <p className={`text-sm font-mono font-bold tracking-wider ${countdown === 'EXECUTING...' ? 'text-neon-amber animate-pulse' : 'text-neon-green'}`}>
-                {countdown}
+          <div className="mt-1">
+            <p className={`text-sm font-mono font-bold tracking-wider ${
+              countdown.state === 'overdue' ? 'text-neon-amber animate-pulse' :
+              countdown.state === 'halted' ? 'text-neon-amber' : 'text-neon-green'
+            }`}>
+              {countdown.label}
+            </p>
+            {countdown.state === 'waiting' && schedule.nextRunAt && (
+              <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
+                {new Date(schedule.nextRunAt).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).toUpperCase()}
               </p>
-              {schedule.nextRunAt && countdown !== 'EXECUTING...' && (
-                <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
-                  {new Date(schedule.nextRunAt).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).toUpperCase()}
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm font-mono text-neon-amber mt-1">HALTED</p>
-          )}
+            )}
+            {schedule.lastRunAt && (
+              <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
+                LAST_RUN: {new Date(schedule.lastRunAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+          </div>
         </div>
         <div className="text-right">
           <p className="sv-stat-label">TOTAL_RUNS</p>

@@ -82,6 +82,7 @@ model Wallet {
   addressType       String   @default("P2TR")
   encryptedSeed     String?
   hasSeed           Boolean  @default(false)
+  lastSyncedAt      DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

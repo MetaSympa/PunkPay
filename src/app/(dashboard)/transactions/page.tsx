@@ -117,7 +117,10 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
 }) {
   const st = STATUS_MAP[tx.status] || STATUS_MAP.DRAFT;
   const isOutgoing = tx.type === 'SEND' || tx.type === 'PAYMENT';
-  const amountBtc = (Number(tx.amountSats) / 1e8).toFixed(4);
+  const sats = BigInt(tx.amountSats);
+  const amountDisplay = sats >= 1_000_000n
+    ? `${(Number(sats) / 1e8).toFixed(6)} BTC`
+    : `${sats.toLocaleString()} SATS`;
 
   return (
     <div className="border-b border-cyber-border/20 last:border-0">
@@ -135,7 +138,7 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
 
         {/* Amount */}
         <span className={`text-sm font-mono font-bold shrink-0 ${isOutgoing ? 'text-neon-amber' : 'text-neon-green'}`}>
-          {isOutgoing ? '-' : '+'}{amountBtc} BTC
+          {isOutgoing ? '-' : '+'}{amountDisplay}
         </span>
 
         {/* Timestamp */}
