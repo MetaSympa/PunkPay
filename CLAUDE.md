@@ -1,6 +1,6 @@
 # PunkPay — Project Memory
 
-> Self-custody Bitcoin payment scheduler for cypherpunks. v0.1.0-alpha, **Mainnet**.
+> Self-custody Bitcoin payment scheduler for cypherpunks. v0.1.0-alpha, **Signet (Mutinynet)** for testing.
 
 ## Stack
 
@@ -95,9 +95,17 @@ npm run db:seed      # seed data
 npm run db:studio    # Prisma Studio
 ```
 
+## Infra Notes
+
+- **Postgres port 5433** — host already has postgres on 5432, Docker container mapped to 5433
+- **Redis eviction: noeviction** — required by BullMQ (was allkeys-lru, fixed in docker-compose.yml)
+- **Mutinynet config** — `BITCOIN_NETWORK=signet`, `MEMPOOL_API_URL=https://mutinynet.com/api`, `MEMPOOL_WS_URL=wss://mutinynet.com/api/v1/ws`
+- **Faucet:** https://faucet.mutinynet.com (~30s blocks)
+
 ## Fixed Issues
 
 - **Worker decrypt failure (2026-03-20):** "Unsupported state or unable to authenticate data" — worker (tsx) loaded MASTER_ENCRYPTION_KEY with quotes from .env while Next.js stripped them. Fix: removed quotes from .env + added `dotenv/config` import to worker.
+- **Postgres port conflict (2026-03-23):** Local postgres on 5432 blocked Docker container. Fix: mapped Docker postgres to 5433, updated DATABASE_URL.
 
 ## Known Gaps (as of 2026-03-20)
 
@@ -107,4 +115,3 @@ npm run db:studio    # Prisma Studio
 - **No multi-sig** — single-key signing only
 - **No hardware wallet** — no Ledger/Trezor integration
 - **No Lightning** — on-chain only
-- **Running on mainnet** — extra caution needed for all Bitcoin changes

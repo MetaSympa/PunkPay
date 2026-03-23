@@ -32,19 +32,41 @@ const NO_CACHE: RequestInit = { cache: 'no-store' };
  */
 export async function fetchUtxos(address: string, network?: string): Promise<MempoolUtxo[]> {
   const url = `${getMempoolApiUrl(network)}/address/${address}/utxo`;
-  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(4000) });
   if (!res.ok) throw new Error(`Failed to fetch UTXOs for ${address}: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
 /**
- * Fetch recommended fee rates
+ * Fetch recommended fee rates.
+ * Handles both mempool.space (/v1/fees/recommended) and Esplora (/fee-estimates) formats.
  */
 export async function fetchFeeEstimates(network?: string): Promise<FeeEstimate> {
-  const url = `${getMempoolApiUrl(network)}/v1/fees/recommended`;
-  const res = await fetch(url, { ...NO_CACHE, signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(`Failed to fetch fee estimates: ${res.statusText}`);
-  return res.json();
+  const base = getMempoolApiUrl(network);
+
+  // Try mempool.space format first
+  const mempoolUrl = `${base}/v1/fees/recommended`;
+  const res = await fetch(mempoolUrl, { ...NO_CACHE, signal: AbortSignal.timeout(4000) })
+    .catch(() => null);
+
+  if (res?.ok) {
+    const data = await res.json();
+    // mempool.space returns { fastestFee, halfHourFee, hourFee, economyFee, minimumFee }
+    if (data.fastestFee != null) return data as FeeEstimate;
+  }
+
+  // Fall back to Esplora format (/fee-estimates returns { "1": rate, "3": rate, ... })
+  const esploraUrl = `${base}/fee-estimates`;
+  const res2 = await fetch(esploraUrl, { ...NO_CACHE, signal: AbortSignal.timeout(4000) });
+  if (!res2.ok) throw new Error(`Failed to fetch fee estimates: ${res2.statusText}`);
+  const data2: Record<string, number> = await res2.json();
+  return {
+    fastestFee:  Math.ceil(data2['1']   ?? data2['2']   ?? 20),
+    halfHourFee: Math.ceil(data2['3']   ?? data2['6']   ?? 10),
+    hourFee:     Math.ceil(data2['6']   ?? data2['10']  ?? 5),
+    economyFee:  Math.ceil(data2['144'] ?? data2['504'] ?? 2),
+    minimumFee:  Math.ceil(data2['1008'] ?? 1),
+  };
 }
 
 /**

@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: punkpay_dev
       POSTGRES_DB: punkpay
     ports:
-      - '5432:5432'
+      - '5433:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --requirepass ""
+    command: redis-server --maxmemory 128mb --maxmemory-policy noeviction --requirepass ""
     ports:
       - '6379:6379'
     volumes:

@@ -58,6 +58,7 @@ interface AddressScanResult {
   chain: 'EXTERNAL' | 'INTERNAL';
   utxos: MempoolUtxo[];
   hasActivity: boolean;
+  scanFailed: boolean;
 }
 
 // ─── Main sync ──────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
   // ── Ensure we have enough pre-derived addresses ─────────────────────────
   const EXT_GAP_LIMIT = 20;
   const INT_GAP_LIMIT = 5;
-  const CONCURRENCY = 5;
+  const CONCURRENCY = 10;
 
   const dbAddresses = await prisma.address.findMany({
     where: { walletId },
@@ -147,55 +148,47 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
     chainType: 'EXTERNAL' | 'INTERNAL',
     gapLimit: number
   ): Promise<AddressScanResult[]> {
+    // Fetch all derived addresses in parallel (chain length is already bounded by
+    // ensureAddresses to highestUsedIdx + gapLimit). Using full CONCURRENCY every
+    // batch avoids the sequential drain that happens when remaining < CONCURRENCY.
+    const allResults = await parallelMap(chain, async (addr) => {
+      addressesChecked++;
+      try {
+        const utxos = await fetchUtxos(addr.address, network);
+        return {
+          addressId: addr.id,
+          address: addr.address,
+          index: addr.index,
+          chain: chainType,
+          utxos,
+          hasActivity: utxos.length > 0 || addr.isUsed,
+          scanFailed: false,
+        } satisfies AddressScanResult;
+      } catch (err) {
+        console.warn(`[sync] Failed to fetch UTXOs for ${addr.address} (index ${addr.index}):`, err instanceof Error ? err.message : err);
+        return {
+          addressId: addr.id,
+          address: addr.address,
+          index: addr.index,
+          chain: chainType,
+          utxos: [] as MempoolUtxo[],
+          hasActivity: addr.isUsed,
+          scanFailed: true,
+        } satisfies AddressScanResult;
+      }
+    }, CONCURRENCY);
+
+    // Trim results to the gap limit window (stop counting after gapLimit consecutive empty)
     const results: AddressScanResult[] = [];
     let consecutiveEmpty = 0;
-    let i = 0;
-
-    while (i < chain.length && consecutiveEmpty < gapLimit) {
-      // Scan in batches of CONCURRENCY
-      const remaining = gapLimit - consecutiveEmpty;
-      const batchSize = Math.min(CONCURRENCY, remaining, chain.length - i);
-      const batch = chain.slice(i, i + batchSize);
-
-      const batchResults = await parallelMap(batch, async (addr) => {
-        addressesChecked++;
-        try {
-          const utxos = await fetchUtxos(addr.address, network);
-          // Activity = has UTXOs now OR was previously marked used
-          const hasActivity = utxos.length > 0 || addr.isUsed;
-          return {
-            addressId: addr.id,
-            address: addr.address,
-            index: addr.index,
-            chain: chainType,
-            utxos,
-            hasActivity,
-          };
-        } catch (err) {
-          console.warn(`[sync] Failed to fetch UTXOs for ${addr.address} (index ${addr.index}):`, err instanceof Error ? err.message : err);
-          return {
-            addressId: addr.id,
-            address: addr.address,
-            index: addr.index,
-            chain: chainType,
-            utxos: [] as MempoolUtxo[],
-            hasActivity: addr.isUsed,
-          };
-        }
-      }, CONCURRENCY);
-
-      for (const result of batchResults) {
-        results.push(result);
-        if (result.hasActivity) {
-          consecutiveEmpty = 0;
-        } else {
-          consecutiveEmpty++;
-        }
+    for (const result of allResults) {
+      results.push(result);
+      if (result.hasActivity) {
+        consecutiveEmpty = 0;
+      } else if (++consecutiveEmpty >= gapLimit) {
+        break;
       }
-
-      i += batchSize;
     }
-
     return results;
   }
 
@@ -232,10 +225,22 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
   }
 
   // 4. Mark spent UTXOs (in DB but not live anymore)
+  // Only mark as spent if the address was successfully scanned — API failures must
+  // never falsely evict UTXOs from the database.
+  const successfullyScannedAddressIds = new Set(
+    allResults.filter(r => !r.scanFailed).map(r => r.addressId)
+  );
+  const failedScanCount = allResults.filter(r => r.scanFailed).length;
+  if (failedScanCount > 0) {
+    console.warn(`[sync] ${failedScanCount} address(es) failed to scan — their UTXOs preserved`);
+  }
+
   let spentUtxos = 0;
   const spentIds: string[] = [];
   for (const [key, dbUtxo] of dbUtxoMap) {
     if (!liveUtxoMap.has(key) && dbUtxo.status !== 'LOCKED') {
+      // Skip UTXOs whose address scan failed — we don't know if they're spent
+      if (!successfullyScannedAddressIds.has(dbUtxo.addressId)) continue;
       spentIds.push(dbUtxo.id);
       spentUtxos++;
     }

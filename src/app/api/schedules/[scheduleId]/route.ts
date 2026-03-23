@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
+import { parseExpression } from 'cron-parser';
 
 const updateScheduleSchema = z.object({
   isActive: z.boolean().optional(),
@@ -57,12 +58,21 @@ export async function PATCH(
   const body = await req.json();
   const data = updateScheduleSchema.parse(body);
 
+  // Recompute nextRunAt when resuming
+  let nextRunAt: Date | undefined;
+  if (data.isActive === true) {
+    try {
+      nextRunAt = parseExpression(schedule.cronExpression, { tz: schedule.timezone }).next().toDate();
+    } catch {}
+  }
+
   const updated = await prisma.paymentSchedule.update({
     where: { id: scheduleId },
     data: {
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.maxFeeRate !== undefined && { maxFeeRate: data.maxFeeRate }),
       ...(data.recipientName !== undefined && { recipientName: data.recipientName }),
+      ...(nextRunAt && { nextRunAt }),
     },
   });
 

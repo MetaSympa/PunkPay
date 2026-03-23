@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { createScheduleSchema } from '@/lib/validation';
 import { createAuditLog } from '@/skills/security/audit-log';
+import { parseExpression } from 'cron-parser';
 
 export async function GET() {
   const session = await auth();
@@ -29,8 +30,8 @@ export async function POST(req: NextRequest) {
 
   const userId = (session.user as any).id;
   const role = (session.user as any).role;
-  if (role !== 'PAYER' && role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Only payers can create schedules' }, { status: 403 });
+  if (!['PAYER', 'RECIPIENT', 'ADMIN'].includes(role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
@@ -41,6 +42,8 @@ export async function POST(req: NextRequest) {
       where: { id: data.walletId, userId },
     });
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
+
+    const nextRun = parseExpression(data.cronExpression, { tz: data.timezone }).next().toDate();
 
     const schedule = await prisma.paymentSchedule.create({
       data: {
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
         cronExpression: data.cronExpression,
         timezone: data.timezone,
         maxFeeRate: data.maxFeeRate,
+        nextRunAt: nextRun,
       },
     });
 

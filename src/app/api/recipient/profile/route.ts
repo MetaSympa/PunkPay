@@ -6,10 +6,11 @@ import { validateXpub } from '@/lib/bitcoin/hd-wallet';
 import { encrypt, decrypt } from '@/lib/crypto';
 
 const profileSchema = z.object({
-  xpub: z.string().min(50, 'Invalid xpub'),
+  xpub: z.string().min(50, 'Invalid xpub').optional(),
+  walletId: z.string().cuid().optional(),
   network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('mainnet'),
   label: z.string().max(100).optional(),
-});
+}).refine(d => d.xpub || d.walletId, { message: 'Either xpub or walletId is required' });
 
 export async function GET() {
   const session = await auth();
@@ -29,18 +30,30 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = profileSchema.parse(body);
+    const userId = (session.user as any).id;
 
-    if (!validateXpub(data.xpub, data.network)) {
+    let xpubPlain: string;
+
+    if (data.walletId) {
+      // Use xpub from an existing wallet owned by this user
+      const wallet = await prisma.wallet.findFirst({ where: { id: data.walletId, userId } });
+      if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
+      xpubPlain = decrypt(wallet.encryptedXpub);
+      data.network = wallet.network as any;
+    } else {
+      xpubPlain = data.xpub!;
+    }
+
+    if (!validateXpub(xpubPlain, data.network)) {
       return NextResponse.json({ error: 'Invalid xpub for this network' }, { status: 400 });
     }
 
-    // Encrypt xpub at rest — same as wallet xpubs
-    const encryptedXpub = encrypt(data.xpub);
+    const encryptedXpub = encrypt(xpubPlain);
 
     const profile = await prisma.recipientProfile.upsert({
-      where: { userId: (session.user as any).id },
+      where: { userId },
       update: { xpub: encryptedXpub, network: data.network, label: data.label },
-      create: { userId: (session.user as any).id, xpub: encryptedXpub, network: data.network, label: data.label },
+      create: { userId, xpub: encryptedXpub, network: data.network, label: data.label },
     });
 
     return NextResponse.json(profile);

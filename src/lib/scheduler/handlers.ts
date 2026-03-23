@@ -57,7 +57,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   });
 
   // Get wallet first so we have network for all bitcoin calls
-  const wallet = await prisma.wallet.findUniqueOrThrow({
+  let wallet = await prisma.wallet.findUniqueOrThrow({
     where: { id: walletId },
     include: {
       utxos: {
@@ -66,6 +66,20 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       },
     },
   });
+
+  // If no UTXOs in DB, try a fresh sync before failing — DB may be stale
+  if (wallet.utxos.length === 0) {
+    await syncWalletUtxos(walletId, wallet.network);
+    wallet = await prisma.wallet.findUniqueOrThrow({
+      where: { id: walletId },
+      include: {
+        utxos: {
+          where: { status: { in: ['CONFIRMED', 'UNCONFIRMED'] }, isLocked: false },
+          include: { address: { select: { chain: true, index: true } } },
+        },
+      },
+    });
+  }
 
   // Resolve recipient address: derive fresh Taproot address from xpub, or use static address
   let recipientAddress: string;
@@ -86,12 +100,12 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   }
 
   if (wallet.utxos.length === 0) {
-    throw new Error('No spendable UTXOs — sync the wallet first');
+    throw new Error('No spendable UTXOs — wallet needs funding');
   }
 
-  // Fetch current fee estimates
-  const fees = await fetchFeeEstimates(wallet.network);
-  const feeRate = Math.min(fees.halfHourFee, maxFeeRate);
+  // Fetch current fee estimates — fall back to a conservative rate if API is unreachable
+  const fees = await fetchFeeEstimates(wallet.network).catch(() => null);
+  const feeRate = Math.min(fees?.halfHourFee ?? 10, maxFeeRate);
 
   const addrType = (wallet.addressType || 'P2TR') as AddressType;
 
@@ -105,7 +119,9 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     index: (u as any).address.index,
   }));
 
-  const estimatedFee = calculateFee(2, 2, feeRate); // Estimate with 2 inputs, 2 outputs
+  // First pass: estimate fee with 1 input (optimistic) so UTXO selection can succeed,
+  // then recalculate with actual selected count below.
+  const estimatedFee = calculateFee(1, 2, feeRate);
   const { selected } = selectUtxos(utxoData, amount, estimatedFee);
 
   // Lock selected UTXOs
@@ -204,10 +220,38 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     data: { nextChangeIndex: { increment: 1 } },
   });
 
-    job.log(`Scheduled payment ${txStatus} — ${amount} sats to ${recipientAddress}${broadcastedTxid ? ` txid: ${broadcastedTxid}` : ''}`);
+  // Update schedule timing
+  const { parseExpression } = await import('cron-parser');
+  const sched = await prisma.paymentSchedule.findUnique({ where: { id: scheduleId } });
+  if (sched) {
+    let nextRunAt: Date | null = null;
+    try { nextRunAt = parseExpression(sched.cronExpression, { tz: sched.timezone }).next().toDate(); } catch {}
+    await prisma.paymentSchedule.update({
+      where: { id: scheduleId },
+      data: { lastRunAt: new Date(), ...(nextRunAt && { nextRunAt }) },
+    });
+  }
+
+  job.log(`Scheduled payment ${txStatus} — ${amount} sats to ${recipientAddress}${broadcastedTxid ? ` txid: ${broadcastedTxid}` : ''}`);
   } catch (err: any) {
-    await stopScheduleWithError(scheduleId, err.message);
-    throw new UnrecoverableError(err.message);
+    const msg: string = err.message ?? String(err);
+    // Transient errors (network timeouts, API failures, insufficient funds) should
+    // let BullMQ retry the job — don't permanently deactivate the schedule.
+    const isTransient =
+      err.name === 'AbortError' ||
+      msg.includes('timeout') ||
+      msg.includes('ECONNREFUSED') ||
+      msg.includes('ENOTFOUND') ||
+      msg.includes('fetch failed') ||
+      msg.includes('No spendable UTXOs') ||
+      msg.includes('Insufficient funds');  // wallet may receive more funds later
+    if (isTransient) {
+      // Rethrow as a plain Error so BullMQ retries per the queue's backoff config
+      throw new Error(msg);
+    }
+    // Permanent failures (bad config, decryption error, missing recipient) stop the schedule
+    await stopScheduleWithError(scheduleId, msg);
+    throw new UnrecoverableError(msg);
   }
 }
 

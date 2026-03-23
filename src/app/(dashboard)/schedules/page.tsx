@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   useSchedules, useToggleSchedule, useDeleteSchedule, useCreateSchedule, useSendNow,
@@ -203,9 +203,29 @@ function CreateForm({ onClose }: { onClose: () => void }) {
 
 /* ── Schedule Card ───────────────────────────────────────────────────── */
 
+function useCountdown(targetDate: string | null, isActive: boolean) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!isActive || !targetDate) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [targetDate, isActive]);
+
+  if (!isActive || !targetDate) return null;
+  const diff = new Date(targetDate).getTime() - now;
+  if (diff <= 0) return 'EXECUTING...';
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  const s = Math.floor((diff % 60_000) / 1000);
+  if (h > 0) return `${h}H ${String(m).padStart(2, '0')}M ${String(s).padStart(2, '0')}S`;
+  if (m > 0) return `${m}M ${String(s).padStart(2, '0')}S`;
+  return `${s}S`;
+}
+
 function ScheduleCard({ schedule }: { schedule: any }) {
   const toggle = useToggleSchedule();
   const del = useDeleteSchedule();
+  const countdown = useCountdown(schedule.nextRunAt, schedule.isActive);
 
   const statusColor = schedule.isActive ? 'text-neon-green' : 'text-neon-amber';
   const statusBg = schedule.isActive ? 'bg-neon-green/10 border-neon-green/30' : 'bg-neon-amber/10 border-neon-amber/30';
@@ -246,9 +266,20 @@ function ScheduleCard({ schedule }: { schedule: any }) {
         </div>
         <div>
           <p className="sv-stat-label">NEXT_PAYMENT</p>
-          <p className="text-sm font-mono text-cyber-text mt-1">
-            {schedule.isActive ? new Date().toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase() : 'HALTED'}
-          </p>
+          {schedule.isActive && countdown ? (
+            <div className="mt-1">
+              <p className={`text-sm font-mono font-bold tracking-wider ${countdown === 'EXECUTING...' ? 'text-neon-amber animate-pulse' : 'text-neon-green'}`}>
+                {countdown}
+              </p>
+              {schedule.nextRunAt && countdown !== 'EXECUTING...' && (
+                <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
+                  {new Date(schedule.nextRunAt).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).toUpperCase()}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm font-mono text-neon-amber mt-1">HALTED</p>
+          )}
         </div>
         <div className="text-right">
           <p className="sv-stat-label">TOTAL_RUNS</p>

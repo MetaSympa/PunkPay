@@ -226,6 +226,7 @@ export default function TransactionsPage() {
   const [selectedDraft, setSelectedDraft] = useState<any>(null);
   const [broadcastResult, setBroadcastResult] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const { data, isLoading } = useTransactions(undefined, statusFilter || undefined);
   const queryClient = useQueryClient();
 
@@ -245,9 +246,6 @@ export default function TransactionsPage() {
   }
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><LoadingSpinner text="LOADING_LOGS" /></div>;
-
-  // Search bar placeholder
-  const [search, setSearch] = useState('');
 
   return (
     <div className="space-y-6">

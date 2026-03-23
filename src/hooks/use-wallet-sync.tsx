@@ -24,7 +24,7 @@ interface WalletSyncContextValue {
 
 const WalletSyncContext = createContext<WalletSyncContextValue | null>(null);
 
-const SYNC_INTERVAL_MS = 60_000; // 60s between auto-syncs
+const SYNC_INTERVAL_MS = 30_000; // 30s — server WebSocket handles real-time sync, this just refreshes display
 const MIN_SYNC_GAP_MS = 10_000;  // Don't re-sync within 10s
 
 export function WalletSyncProvider({ children }: { children: ReactNode }) {
@@ -82,21 +82,17 @@ export function WalletSyncProvider({ children }: { children: ReactNode }) {
 
   const registerWallet = useCallback((walletId: string) => {
     registeredWallets.current.add(walletId);
-  }, []);
+    // Trigger an immediate sync when a wallet is registered. MIN_SYNC_GAP_MS
+    // prevents redundant syncs if registerWallet is called multiple times.
+    syncWallet(walletId);
+  }, [syncWallet]);
 
   const unregisterWallet = useCallback((walletId: string) => {
     registeredWallets.current.delete(walletId);
   }, []);
 
-  // Auto-sync loop: iterate registered wallets on interval
+  // Auto-sync loop: re-sync all registered wallets every 60s
   useEffect(() => {
-    // Initial sync for all registered wallets after a short delay
-    const initTimeout = setTimeout(() => {
-      for (const wid of registeredWallets.current) {
-        syncWallet(wid);
-      }
-    }, 1000);
-
     intervalRef.current = setInterval(() => {
       for (const wid of registeredWallets.current) {
         syncWallet(wid);
@@ -104,7 +100,6 @@ export function WalletSyncProvider({ children }: { children: ReactNode }) {
     }, SYNC_INTERVAL_MS);
 
     return () => {
-      clearTimeout(initTimeout);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [syncWallet]);

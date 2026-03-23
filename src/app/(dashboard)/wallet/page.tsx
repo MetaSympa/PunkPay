@@ -31,7 +31,7 @@ function useRecipientProfile() {
 function useSaveProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { xpub: string; network: string; label?: string }) => {
+    mutationFn: async (data: { xpub?: string; walletId?: string; network?: string; label?: string }) => {
       const res = await fetch('/api/recipient/profile', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
       });
@@ -366,6 +366,14 @@ function RecipientWalletPage() {
     } catch (err: any) { setProfileMsg(`ERROR: ${err.message}`); }
   }
 
+  async function handleUseWallet(walletId: string, walletLabel: string) {
+    setProfileMsg('');
+    try {
+      await saveProfile.mutateAsync({ walletId, label: walletLabel || 'Wallet Profile' } as any);
+      setProfileMsg('LINKED'); setShowProfileForm(false);
+    } catch (err: any) { setProfileMsg(`ERROR: ${err.message}`); }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -388,10 +396,17 @@ function RecipientWalletPage() {
       ) : (
         <div className="space-y-4">
           {wallets.map(w => (
-            <WalletCard key={w.id} wallet={w} onDelete={() => deleteWallet.mutate(w.id)} deleting={deleteWallet.isPending} />
+            <div key={w.id} className="space-y-1">
+              <WalletCard wallet={w} onDelete={() => deleteWallet.mutate(w.id)} deleting={deleteWallet.isPending} />
+              <NeonButton variant="ghost" size="sm" onClick={() => handleUseWallet(w.id, (w as any).label || w.name || '')}
+                loading={saveProfile.isPending} className="ml-4 text-[10px]">
+                ⚡ USE_AS_PAYMENT_PROFILE
+              </NeonButton>
+            </div>
           ))}
         </div>
       )}
+
 
       {/* Payment profile */}
       <div className="sv-card overflow-hidden">

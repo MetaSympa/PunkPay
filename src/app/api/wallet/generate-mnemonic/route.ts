@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as any).role !== 'PAYER') {
+  if (!['PAYER', 'RECIPIENT', 'ADMIN'].includes((session.user as any).role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

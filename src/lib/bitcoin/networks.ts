@@ -29,3 +29,15 @@ export function getMempoolApiUrl(network?: string): string {
     default:        return 'https://mempool.space/api';
   }
 }
+
+export function getMempoolWsUrl(network?: string): string {
+  if (process.env.MEMPOOL_WS_URL) return process.env.MEMPOOL_WS_URL;
+
+  const net = network || process.env.BITCOIN_NETWORK || 'mainnet';
+  switch (net) {
+    case 'mainnet': return 'wss://mempool.space/api/v1/ws';
+    case 'testnet': return 'wss://mempool.space/testnet/api/v1/ws';
+    case 'signet':  return 'wss://mempool.space/signet/api/v1/ws';
+    default:        return 'wss://mempool.space/api/v1/ws';
+  }
+}

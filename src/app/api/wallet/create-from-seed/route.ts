@@ -17,8 +17,8 @@ const createFromSeedSchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as any).role !== 'PAYER') {
-    return NextResponse.json({ error: 'Forbidden — only PAYERs can create funding wallets' }, { status: 403 });
+  if (!['PAYER', 'RECIPIENT', 'ADMIN'].includes((session.user as any).role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const userId = (session.user as any).id;
