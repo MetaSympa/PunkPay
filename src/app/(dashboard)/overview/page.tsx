@@ -1,7 +1,8 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useWallets } from '@/hooks/use-wallet';
 import { useSchedules } from '@/hooks/use-schedules';
@@ -77,14 +78,124 @@ function Sparkline({ prices }: { prices: number[] }) {
 /* ── Status maps ──────────────────────────────────────────────────────── */
 
 const TX_STATUS: Record<string, { label: string; color: string }> = {
-  CONFIRMED: { label: '[CONFIRMED]', color: 'text-neon-green' },
-  BROADCAST: { label: '[BROADCAST]', color: 'text-neon-amber' },
-  DRAFT:     { label: '[DRAFT]',     color: 'text-cyber-muted' },
-  FAILED:    { label: '[FAILED]',    color: 'text-neon-red' },
+  CONFIRMED: { label: 'Confirmed', color: 'text-neon-green' },
+  BROADCAST: { label: 'Broadcast', color: 'text-neon-amber' },
+  DRAFT:     { label: 'Draft',     color: 'text-cyber-muted' },
+  FAILED:    { label: 'Failed',    color: 'text-neon-red' },
 };
 const EXP_COLOR: Record<string, string> = {
   PENDING: 'text-neon-amber', APPROVED: 'text-neon-green', REJECTED: 'text-neon-red', PAID: 'text-cyber-muted',
 };
+
+/* ── Quick Transfer Modal ─────────────────────────────────────────────── */
+
+function QuickTransferModal({ wallets, onClose }: { wallets: any[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const hotWallets = wallets.filter(w => w.hasSeed);
+  const [form, setForm] = useState({
+    toAddress: '',
+    amountSats: '',
+    feeRate: '5',
+    walletId: hotWallets[0]?.id ?? '',
+  });
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [txid, setTxid] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSending(true); setError('');
+    try {
+      const res = await fetch('/api/recipient/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toAddress: form.toAddress.trim(),
+          amountSats: parseInt(form.amountSats),
+          walletId: form.walletId,
+          feeRate: parseInt(form.feeRate),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Send failed');
+      setTxid(data.txid);
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['wallets'] });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full sm:max-w-md sv-card rounded-t-2xl sm:rounded-lg">
+        <div className="px-5 py-4 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
+          <span className="text-[11px] font-mono text-neon-green uppercase tracking-[0.15em]">⚡ Quick Transfer</span>
+          <button onClick={onClose} className="text-cyber-muted hover:text-cyber-text font-mono">✕</button>
+        </div>
+        <div className="p-5">
+          {txid ? (
+            <div className="space-y-4">
+              <p className="text-neon-green font-mono text-sm">✓ Broadcast successful</p>
+              <div>
+                <p className="sv-stat-label">TXID</p>
+                <a href={`https://mutinynet.com/tx/${txid}`} target="_blank" rel="noopener noreferrer"
+                  className="font-mono text-xs text-neon-green break-all hover:underline mt-1 inline-block">{txid}</a>
+              </div>
+              <NeonButton variant="primary" onClick={onClose} className="w-full">Done</NeonButton>
+            </div>
+          ) : hotWallets.length === 0 ? (
+            <div className="space-y-4">
+              <p className="text-neon-amber text-sm font-mono">No hot wallet found. Import a wallet with a seed phrase to send.</p>
+              <NeonButton variant="ghost" onClick={onClose} className="w-full">Close</NeonButton>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {hotWallets.length > 1 && (
+                <div>
+                  <label className="sv-label">From Wallet</label>
+                  <select value={form.walletId} onChange={e => setForm({ ...form, walletId: e.target.value })}
+                    className="sv-input mt-1">
+                    {hotWallets.map((w: any) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="sv-label">To Address</label>
+                <input type="text" value={form.toAddress} onChange={e => setForm({ ...form, toAddress: e.target.value })}
+                  placeholder="tb1p… or bc1p…" className="sv-input mt-1 text-xs" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="sv-label">Amount (sats)</label>
+                  <input type="number" value={form.amountSats} onChange={e => setForm({ ...form, amountSats: e.target.value })}
+                    min="546" className="sv-input mt-1" required />
+                </div>
+                <div>
+                  <label className="sv-label">Fee (sat/vB)</label>
+                  <input type="number" value={form.feeRate} onChange={e => setForm({ ...form, feeRate: e.target.value })}
+                    min="1" max="1000" className="sv-input mt-1" />
+                </div>
+              </div>
+              {error && <p className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2">{error}</p>}
+              <div className="flex gap-3">
+                <NeonButton type="submit" variant="primary" loading={sending} disabled={!form.toAddress || !form.amountSats} className="flex-1">
+                  Send
+                </NeonButton>
+                <NeonButton type="button" variant="ghost" onClick={onClose} className="flex-1">Cancel</NeonButton>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── PAYER DASHBOARD ──────────────────────────────────────────────────── */
 
@@ -96,6 +207,7 @@ function PayerDashboard() {
   const { data: btc } = useBtcData();
   const { data: recipients } = useRecipients();
   const approveExpense = useApproveExpense();
+  const [showQuickTransfer, setShowQuickTransfer] = useState(false);
 
   const firstWalletId = wallets?.[0]?.id ?? null;
   const { isSyncing, syncNow } = useWalletSync(firstWalletId);
@@ -117,7 +229,7 @@ function PayerDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Main balance card */}
         <div className="lg:col-span-2 sv-card p-6 relative overflow-hidden">
-          <p className="sv-stat-label">TOTAL_VAULT_LIQUIDITY</p>
+          <p className="sv-stat-label">Balance</p>
           <div className="mt-2">
             <span className="text-4xl sm:text-5xl font-mono font-bold text-cyber-text tracking-tight">
               {totalBtc}
@@ -130,11 +242,9 @@ function PayerDashboard() {
             </span>
           </div>
           <div className="flex gap-3 mt-6">
-            <Link href="/schedules">
-              <NeonButton variant="primary" size="md">⚡ QUICK TRANSFER</NeonButton>
-            </Link>
+            <NeonButton variant="primary" size="md" onClick={() => setShowQuickTransfer(true)}>⚡ Quick Transfer</NeonButton>
             <Link href="/wallet">
-              <NeonButton variant="ghost" size="md">RECEIVE</NeonButton>
+              <NeonButton variant="ghost" size="md">Receive</NeonButton>
             </Link>
           </div>
           {/* Sync indicator */}
@@ -148,8 +258,8 @@ function PayerDashboard() {
         {/* BTC price chart */}
         <div className="sv-card p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">BTC_USD_FEED</span>
-            <span className="text-[10px] text-cyber-muted font-mono tracking-wider">LIVE_SOCKET_ESTABLISHED</span>
+            <span className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">Bitcoin</span>
+            <span className="text-[10px] text-cyber-muted font-mono tracking-wider">7-day chart</span>
           </div>
           <div className="mt-3 flex-1">
             {btc?.chartPrices && <Sparkline prices={btc.chartPrices} />}
@@ -170,31 +280,31 @@ function PayerDashboard() {
       {/* ── Stats row ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Link href="/wallet" className="sv-stat hover:border-neon-green/30 transition-colors">
-          <p className="sv-stat-label">SATS_STACKED_30D</p>
+          <p className="sv-stat-label">Total Sats</p>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-neon-green">◇</span>
             <span className="sv-stat-value">{totalSats.toLocaleString()}</span>
           </div>
         </Link>
 
-        <div className="sv-stat">
-          <p className="sv-stat-label">NODE_UPTIME</p>
+        <Link href="/transactions" className="sv-stat hover:border-neon-green/30 transition-colors">
+          <p className="sv-stat-label">Transactions</p>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-neon-green">▣</span>
-            <span className="sv-stat-value">99.98<span className="text-sm text-cyber-muted ml-0.5">%</span></span>
+            <span className="text-neon-green">⟳</span>
+            <span className="sv-stat-value">{txData?.total ?? 0}</span>
           </div>
-        </div>
+        </Link>
 
         <div className="sv-stat">
-          <p className="sv-stat-label">NETWORK_FEE_AVG</p>
+          <p className="sv-stat-label">Network Fee</p>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-neon-green">⊘</span>
-            <span className="sv-stat-value">12 <span className="text-sm text-cyber-muted">SAT/VB</span></span>
+            <span className="sv-stat-value">12 <span className="text-sm text-cyber-muted">sat/vB</span></span>
           </div>
         </div>
 
         <Link href="/schedules" className="sv-stat hover:border-neon-green/30 transition-colors">
-          <p className="sv-stat-label">ACTIVE_CHANNELS</p>
+          <p className="sv-stat-label">Active Schedules</p>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-neon-green">⚙</span>
             <span className="sv-stat-value">{activeSchedules.length}</span>
@@ -206,7 +316,7 @@ function PayerDashboard() {
       {pendingExpenses.length > 0 && (
         <div className="sv-card overflow-hidden">
           <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-neon-amber flex items-center justify-between">
-            <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">PENDING_APPROVAL</span>
+            <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">Needs Approval</span>
             <span className="text-[10px] font-mono text-cyber-muted">{pendingExpenses.length}</span>
           </div>
           <div className="divide-y divide-cyber-border/30">
@@ -242,13 +352,13 @@ function PayerDashboard() {
         <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-neon-green rounded-sm" />
-            <span className="text-[11px] font-mono text-cyber-text uppercase tracking-[0.15em]">RECENT_PROTOCOL_LOGS</span>
+            <span className="text-[11px] font-mono text-cyber-text uppercase tracking-[0.15em]">Recent Transactions</span>
           </div>
-          <Link href="/transactions" className="text-[10px] font-mono text-neon-green hover:underline tracking-wider">VIEW_ALL</Link>
+          <Link href="/transactions" className="text-[10px] font-mono text-neon-green hover:underline tracking-wider">View all</Link>
         </div>
         {recentTxs.length === 0 ? (
           <div className="px-4 py-6 text-center">
-            <p className="text-xs font-mono text-cyber-muted">NO_TRANSACTIONS_FOUND</p>
+            <p className="text-xs font-mono text-cyber-muted">No transactions yet</p>
           </div>
         ) : (
           <div>
@@ -265,7 +375,9 @@ function PayerDashboard() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className={`text-sm font-mono font-semibold ${isOutgoing ? 'text-neon-amber' : 'text-neon-green'}`}>
-                      {isOutgoing ? '-' : '+'}{(Number(tx.amountSats) / 1e8).toFixed(3)} BTC
+                      {isOutgoing ? '-' : '+'}{Number(tx.amountSats) >= 100_000
+                        ? `${(Number(tx.amountSats) / 1e8).toFixed(5)} BTC`
+                        : `${Number(tx.amountSats).toLocaleString()} sats`}
                     </span>
                     <span className="text-[10px] font-mono text-cyber-muted hidden sm:block">
                       {new Date(tx.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })} UTC
@@ -277,6 +389,10 @@ function PayerDashboard() {
           </div>
         )}
       </div>
+
+      {showQuickTransfer && (
+        <QuickTransferModal wallets={wallets ?? []} onClose={() => setShowQuickTransfer(false)} />
+      )}
     </div>
   );
 }

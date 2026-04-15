@@ -8,7 +8,8 @@ A self-custody Bitcoin payment scheduler for cypherpunks. Manage wallets, schedu
 
 - **HD Wallet Management** — Create wallets from BIP39 mnemonics or import watch-only xpubs. Supports P2TR (Taproot) and P2WPKH (SegWit).
 - **Scheduled Payments** — Automate recurring Bitcoin payments using cron expressions. Auto-signs with stored seed or creates draft transactions for manual signing.
-- **Expense Workflow** — Recipients submit expenses; payers approve and pay in sats. Multi-level approval with audit trail.
+- **Expense Workflow** — Recipients submit expenses; payers approve and pay in sats. Multi-level approval with a
+udit trail.
 - **UTXO Management** — Syncs UTXOs from Mempool.space, handles UTXO locking to prevent double-spends, and supports fee-bumping via RBF.
 - **Multi-user Roles** — `PAYER` (fund wallets, create schedules) and `RECIPIENT` (submit expenses, set xpub for fresh receive addresses).
 - **2FA** — TOTP-based two-factor authentication.

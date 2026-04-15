@@ -45,9 +45,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(user, { status: 201 });
   } catch (error: any) {
     if (error.name === 'ZodError') {
-      return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 });
+      const issues: { path: string; message: string }[] = (error.issues ?? error.errors ?? []).map(
+        (issue: any) => ({ path: issue.path.join('.') || 'general', message: issue.message })
+      );
+      console.error('[register] Validation failed:', JSON.stringify(issues));
+      return NextResponse.json({ error: 'Validation failed', issues }, { status: 400 });
     }
-    console.error('Registration error:', error);
+    console.error('[register] Unexpected error:', error instanceof Error ? error.stack : error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

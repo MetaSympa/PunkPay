@@ -56,3 +56,9 @@ export const GENERAL_RATE_LIMIT: RateLimitConfig = {
   windowMs: 60 * 1000,
   maxRequests: 60,
 };
+
+// Sync endpoints — expensive external API calls, but allow auto-sync + manual clicks
+export const SYNC_RATE_LIMIT: RateLimitConfig = {
+  windowMs: 60 * 1000,  // 1 minute
+  maxRequests: 6,
+};

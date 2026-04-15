@@ -147,11 +147,9 @@ function CreateForm({ onClose }: { onClose: () => void }) {
               )}
             </div>
 
-            {form.derivedAddress && (
+            {form.derivedAddress && payType !== 'schedule' && (
               <div className="bg-cyber-bg border border-neon-green/20 rounded px-3 py-2">
-                <p className="text-[10px] font-mono text-cyber-muted mb-0.5 tracking-wider">
-                  {payType === 'schedule' ? 'NEXT_ADDRESS (ROTATES_EACH_PAYMENT)' : 'DERIVED_ADDRESS'}
-                </p>
+                <p className="text-[10px] font-mono text-cyber-muted mb-0.5 tracking-wider">DERIVED_ADDRESS</p>
                 <p className="text-xs font-mono text-neon-green break-all">{form.derivedAddress}</p>
               </div>
             )}
@@ -201,7 +199,7 @@ function CreateForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ── Schedule Card ───────────────────────────────────────────────────── */
+/* ── Schedule Table ──────────────────────────────────────────────────── */
 
 function formatDuration(ms: number) {
   const abs = Math.abs(ms);
@@ -224,120 +222,106 @@ function useCountdown(targetDate: string | null, isActive: boolean): { label: st
   if (!isActive || !targetDate) return { label: 'HALTED', state: 'halted' };
   const diff = new Date(targetDate).getTime() - now;
   if (diff <= 0) {
-    return { label: `EXECUTING · ${formatDuration(diff)} ELAPSED`, state: 'overdue' };
+    return { label: `${formatDuration(diff)} ELAPSED`, state: 'overdue' };
   }
   return { label: formatDuration(diff), state: 'waiting' };
 }
 
-function ScheduleCard({ schedule }: { schedule: any }) {
+function ScheduleRow({ schedule }: { schedule: any }) {
   const toggle = useToggleSchedule();
   const del = useDeleteSchedule();
   const countdown = useCountdown(schedule.nextRunAt, schedule.isActive);
 
   const statusColor = schedule.isActive ? 'text-neon-green' : 'text-neon-amber';
-  const statusBg = schedule.isActive ? 'bg-neon-green/10 border-neon-green/30' : 'bg-neon-amber/10 border-neon-amber/30';
-  const borderAccent = schedule.isActive ? 'border-l-neon-green' : 'border-l-neon-amber';
 
   return (
-    <div className="sv-card overflow-hidden">
-      <div className={`px-5 py-4 border-b border-cyber-border border-l-2 ${borderAccent} flex items-center justify-between`}>
-        <div className="flex items-center gap-3">
-          {/* Icon */}
-          <div className="w-10 h-10 rounded-lg bg-cyber-surface border border-cyber-border flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-neon-green">
-              <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-mono text-sm text-cyber-text font-semibold uppercase">
-              {schedule.recipientName?.replace(/\s/g, '_') || 'UNNAMED_RECIPIENT'}
-            </p>
-            <p className="text-[10px] font-mono text-cyber-muted mt-0.5">{schedule.wallet?.name}</p>
-          </div>
-        </div>
-        <span className={`text-[10px] font-mono ${statusColor} border ${statusBg} rounded px-2 py-0.5 tracking-wider`}>
-          {schedule.isActive ? 'ACTIVE' : 'PAUSED'}
-        </span>
-      </div>
-
-      <div className="px-5 py-4 grid grid-cols-2 gap-4">
-        <div>
-          <p className="sv-stat-label">AMOUNT</p>
-          <p className="text-xl font-mono font-bold text-neon-green mt-1">
-            {BigInt(schedule.amountSats).toLocaleString()} <span className="text-[10px] text-cyber-muted font-normal">SATS</span>
+    <>
+      <tr className="border-b border-cyber-border/30 hover:bg-cyber-surface/30 transition-colors">
+        <td className="px-4 py-3">
+          <p className="font-mono text-sm text-cyber-text font-semibold uppercase">
+            {schedule.recipientName?.replace(/\s/g, '_') || 'UNNAMED'}
           </p>
-        </div>
-        <div className="text-right">
-          <p className="sv-stat-label">FREQUENCY</p>
-          <p className="text-sm font-mono text-cyber-text font-semibold mt-1 tracking-wider">{cronLabel(schedule.cronExpression)}</p>
-        </div>
-        <div>
-          <p className="sv-stat-label">NEXT_PAYMENT</p>
-          <div className="mt-1">
-            <p className={`text-sm font-mono font-bold tracking-wider ${
-              countdown.state === 'overdue' ? 'text-neon-amber animate-pulse' :
-              countdown.state === 'halted' ? 'text-neon-amber' : 'text-neon-green'
-            }`}>
-              {countdown.label}
-            </p>
-            {countdown.state === 'waiting' && schedule.nextRunAt && (
-              <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
-                {new Date(schedule.nextRunAt).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).toUpperCase()}
-              </p>
+          <p className="text-[10px] font-mono text-cyber-muted mt-0.5">{schedule.wallet?.name}</p>
+        </td>
+        <td className="px-4 py-3 text-right">
+          <span className="font-mono text-sm font-bold text-neon-green">
+            {BigInt(schedule.amountSats).toLocaleString()}
+          </span>
+          <span className="text-[10px] text-cyber-muted font-mono ml-1">SATS</span>
+        </td>
+        <td className="px-4 py-3 text-center">
+          <span className="font-mono text-xs text-cyber-text tracking-wider">{cronLabel(schedule.cronExpression)}</span>
+        </td>
+        <td className="px-4 py-3 text-center">
+          <p className={`font-mono text-xs font-bold tracking-wider ${
+            countdown.state === 'overdue' ? 'text-neon-amber animate-pulse' :
+            countdown.state === 'halted' ? 'text-neon-amber' : 'text-neon-green'
+          }`}>
+            {countdown.label}
+          </p>
+        </td>
+        <td className="px-4 py-3 text-center">
+          <span className="font-mono text-xs text-cyber-text">{schedule._count.transactions}</span>
+        </td>
+        <td className="px-4 py-3 text-center">
+          <span className={`text-[10px] font-mono ${statusColor} tracking-wider`}>
+            {schedule.isActive ? '● ACTIVE' : '○ PAUSED'}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex gap-1.5 justify-end">
+            {schedule.isActive ? (
+              <NeonButton variant="amber" size="sm" loading={toggle.isPending}
+                onClick={() => toggle.mutate({ scheduleId: schedule.id, isActive: false })}>
+                PAUSE
+              </NeonButton>
+            ) : (
+              <NeonButton variant="primary" size="sm" loading={toggle.isPending}
+                onClick={() => toggle.mutate({ scheduleId: schedule.id, isActive: true })}>
+                RESUME
+              </NeonButton>
             )}
-            {schedule.lastRunAt && (
-              <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
-                LAST_RUN: {new Date(schedule.lastRunAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            )}
+            <NeonButton variant="red" size="sm" loading={del.isPending}
+              onClick={() => { if (confirm('Delete this schedule?')) del.mutate(schedule.id); }}>
+              ✕
+            </NeonButton>
           </div>
-        </div>
-        <div className="text-right">
-          <p className="sv-stat-label">TOTAL_RUNS</p>
-          <p className="text-sm font-mono text-cyber-text mt-1">{schedule._count.transactions}</p>
-        </div>
-      </div>
-
-      {schedule.recipientXpub && (
-        <div className="px-5 pb-2">
-          <p className="text-[10px] font-mono text-neon-green/70 tracking-wider">ROTATING_ADDRESS · #{schedule.recipientXpubIndex} NEXT</p>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="px-5 py-3 border-t border-cyber-border/50 flex gap-2">
-        {schedule.isActive ? (
-          <NeonButton variant="ghost" size="sm" loading={toggle.isPending}
-            onClick={() => toggle.mutate({ scheduleId: schedule.id, isActive: false })}>
-            EDIT
-          </NeonButton>
-        ) : (
-          <NeonButton variant="primary" size="sm" loading={toggle.isPending}
-            onClick={() => toggle.mutate({ scheduleId: schedule.id, isActive: true })}>
-            RESUME
-          </NeonButton>
-        )}
-        {schedule.isActive && (
-          <NeonButton variant="amber" size="sm" loading={toggle.isPending}
-            onClick={() => toggle.mutate({ scheduleId: schedule.id, isActive: false })}>
-            PAUSE
-          </NeonButton>
-        )}
-        <NeonButton variant="red" size="sm" loading={del.isPending}
-          onClick={() => { if (confirm('Delete this schedule?')) del.mutate(schedule.id); }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" />
-          </svg>
-        </NeonButton>
-      </div>
-
+        </td>
+      </tr>
       {schedule.lastError && (
-        <div className="px-5 pb-3">
-          <div className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2 break-all">
-            [ERROR] {schedule.lastError}
-          </div>
-        </div>
+        <tr>
+          <td colSpan={7} className="px-4 pb-2">
+            <div className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2 break-all">
+              [ERROR] {schedule.lastError}
+            </div>
+          </td>
+        </tr>
       )}
+    </>
+  );
+}
+
+function ScheduleTable({ schedules }: { schedules: any[] }) {
+  return (
+    <div className="sv-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-cyber-border">
+              <th className="px-4 py-3 text-left text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">RECIPIENT</th>
+              <th className="px-4 py-3 text-right text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">AMOUNT</th>
+              <th className="px-4 py-3 text-center text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">FREQUENCY</th>
+              <th className="px-4 py-3 text-center text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">NEXT RUN</th>
+              <th className="px-4 py-3 text-center text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">RUNS</th>
+              <th className="px-4 py-3 text-center text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">STATUS</th>
+              <th className="px-4 py-3 text-right text-[10px] font-mono text-cyber-muted uppercase tracking-[0.15em]">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {schedules.map(s => <ScheduleRow key={s.id} schedule={s} />)}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -354,77 +338,27 @@ export default function SchedulesPage() {
 
   if (isLoading) return <div className="flex h-64 items-center justify-center"><LoadingSpinner text="LOADING_PROTOCOLS" /></div>;
 
-  const active = schedules?.filter(s => s.isActive) ?? [];
-  const paused = schedules?.filter(s => !s.isActive) ?? [];
-
-  // Execution success (mock for now)
-  const totalRuns = schedules?.reduce((s, sch) => s + (sch._count?.transactions || 0), 0) ?? 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="sv-section-header">
-          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">SYSTEM // AUTOMATION</p>
-          <h1 className="text-3xl sm:text-4xl font-mono font-bold tracking-tight mt-1">
-            <span className="text-cyber-text">RECURRENT</span><br />
-            <span className="text-neon-green">PROTOCOLS</span>
-          </h1>
+          <h1 className="text-3xl font-mono font-bold tracking-tight text-cyber-text">Payment Schedules</h1>
         </div>
         <NeonButton variant="primary" size="md" onClick={() => setShowCreate(true)}>
-          + ADD NEW RULE
+          + Add New Schedule
         </NeonButton>
       </div>
 
-      {/* Schedule cards */}
-      {!schedules?.length && (
+      {/* Schedule table */}
+      {!schedules?.length ? (
         <div className="sv-card px-4 py-10 text-center">
           <p className="text-cyber-muted font-mono text-sm mb-4">NO_PAYMENT_RULES_CONFIGURED</p>
-          <NeonButton variant="primary" onClick={() => setShowCreate(true)}>+ ADD NEW RULE</NeonButton>
+          <NeonButton variant="primary" onClick={() => setShowCreate(true)}>+ Add New Schedule</NeonButton>
         </div>
-      )}
-
-      {active.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {active.map(s => <ScheduleCard key={s.id} schedule={s} />)}
-        </div>
-      )}
-
-      {paused.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paused.map(s => <ScheduleCard key={s.id} schedule={s} />)}
-        </div>
-      )}
-
-      {/* Bottom section: execution stats + live logs */}
-      {schedules && schedules.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Execution success */}
-          <div className="sv-card p-6 flex flex-col items-center justify-center">
-            <p className="text-4xl font-mono font-bold text-neon-green">
-              99.9<span className="text-xl text-cyber-muted">%</span>
-            </p>
-            <p className="text-[10px] font-mono text-cyber-muted tracking-wider mt-2">EXECUTION_SUCCESS</p>
-          </div>
-
-          {/* Live execution logs */}
-          <div className="sm:col-span-2 sv-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-cyber-border flex items-center justify-between">
-              <span className="text-[11px] font-mono text-cyber-text uppercase tracking-[0.15em] font-semibold">LIVE_EXECUTION_LOGS</span>
-              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">ENCRYPTED_STREAM_ID: 0x94F2</span>
-            </div>
-            <div className="p-4 space-y-1 font-mono text-xs">
-              {schedules.slice(0, 4).map((s, i) => (
-                <p key={s.id} className="text-cyber-muted">
-                  <span className={`${s.isActive ? 'text-neon-green' : 'text-neon-amber'}`}>
-                    [{s.isActive ? 'SUCCESS' : 'WARNING'}]
-                  </span>
-                  {' '}RULE_ID_{String(i + 1).padStart(3, '0')}: {s.isActive ? `Executed. ${BigInt(s.amountSats).toLocaleString()} SATS transmitted.` : 'Manually suspended by User.'}
-                </p>
-              ))}
-            </div>
-          </div>
-        </div>
+      ) : (
+        <ScheduleTable schedules={schedules} />
       )}
 
       {showCreate && <CreateForm onClose={() => setShowCreate(false)} />}

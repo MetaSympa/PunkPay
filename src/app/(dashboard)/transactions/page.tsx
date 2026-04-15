@@ -68,11 +68,11 @@ function DraftModal({ tx, onClose, onBroadcast }: { tx: any; onClose: () => void
           <div className="grid grid-cols-2 gap-4 text-xs font-mono">
             <div>
               <p className="sv-stat-label">AMOUNT</p>
-              <p className="text-neon-amber font-semibold mt-0.5">{BigInt(tx.amountSats).toLocaleString()} SATS</p>
+              <p className="text-neon-amber font-semibold mt-0.5">{BigInt(tx.amountSats).toLocaleString()} sats</p>
             </div>
             <div>
               <p className="sv-stat-label">FEE</p>
-              <p className="text-cyber-text mt-0.5">{tx.feeSats ? BigInt(tx.feeSats).toLocaleString() : '—'} SATS</p>
+              <p className="text-cyber-text mt-0.5">{tx.feeSats ? BigInt(tx.feeSats).toLocaleString() : '—'} sats</p>
             </div>
           </div>
           {tx.recipientAddress && (
@@ -120,7 +120,7 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
   const sats = BigInt(tx.amountSats);
   const amountDisplay = sats >= 1_000_000n
     ? `${(Number(sats) / 1e8).toFixed(6)} BTC`
-    : `${sats.toLocaleString()} SATS`;
+    : `${sats.toLocaleString()} sats`;
 
   return (
     <div className="border-b border-cyber-border/20 last:border-0">
@@ -132,7 +132,7 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
             {tx.txid || ellipsis(tx.id, 8, 6)}
           </p>
           <p className="text-[10px] font-mono text-cyber-muted mt-0.5">
-            RECV: {tx.recipientAddress ? ellipsis(tx.recipientAddress, 10, 6) : '—'}
+            To: {tx.recipientAddress ? ellipsis(tx.recipientAddress, 10, 6) : '—'}
           </p>
         </div>
 
@@ -158,12 +158,12 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-3">
             <div>
               <p className="sv-stat-label">AMOUNT</p>
-              <p className="text-sm font-mono text-neon-amber mt-0.5">{BigInt(tx.amountSats).toLocaleString()} SATS</p>
+              <p className="text-sm font-mono text-neon-amber mt-0.5">{BigInt(tx.amountSats).toLocaleString()} sats</p>
             </div>
             <div>
               <p className="sv-stat-label">FEE</p>
               <p className="text-sm font-mono text-cyber-text mt-0.5">
-                {tx.feeSats ? `${BigInt(tx.feeSats).toLocaleString()} SATS` : '—'}
+                {tx.feeSats ? `${BigInt(tx.feeSats).toLocaleString()} sats` : '—'}
                 {tx.feeRate ? <span className="text-cyber-muted text-[10px] ml-1">({tx.feeRate} sat/vB)</span> : null}
               </p>
             </div>
@@ -183,7 +183,7 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
             )}
             {tx.txid && (
               <div className="col-span-2">
-                <p className="sv-stat-label">TRANSACTION_ID</p>
+                <p className="sv-stat-label">TXID</p>
                 <a href={`https://mempool.space/tx/${tx.txid}`} target="_blank" rel="noopener noreferrer"
                   className="text-xs font-mono text-neon-green hover:underline break-all mt-0.5 inline-block">{tx.txid}</a>
               </div>
@@ -248,50 +248,27 @@ export default function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: ['transactions'] });
   }
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><LoadingSpinner text="LOADING_LOGS" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center h-64"><LoadingSpinner text="Loading..." /></div>;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="sm:col-span-2 sv-card p-4 border-l-2 border-l-neon-green">
-          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">NETWORK_CONNECTIVITY</p>
-          <div className="flex items-end gap-6 mt-2">
-            <div>
-              <p className="sv-stat-label">NODE_STATUS</p>
-              <p className="text-xl font-mono font-bold text-neon-green">OPERATIONAL</p>
-            </div>
-            <div>
-              <p className="sv-stat-label">BLOCK_HEIGHT</p>
-              <p className="text-xl font-mono font-bold text-cyber-text">834,102</p>
-            </div>
-            <div>
-              <p className="sv-stat-label">MEMPOOL_WEIGHT</p>
-              <p className="text-xl font-mono font-bold text-cyber-text">32.4 <span className="text-sm text-cyber-muted">vMB</span></p>
-            </div>
-          </div>
-        </div>
-        <div className="sv-card p-4 bg-cyber-card">
-          <p className="text-[11px] text-neon-amber font-mono uppercase tracking-[0.15em]">ACTIVE_FILTER</p>
-          <p className="text-2xl font-mono font-bold text-cyber-text mt-2">
-            {statusFilter ? statusFilter : 'ALL_LOGS'}
-          </p>
-          <span className="inline-block w-2 h-2 bg-neon-green rounded-sm mt-1 sv-cursor" />
-        </div>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-mono font-bold text-cyber-text tracking-tight">Transactions</h1>
       </div>
 
       {/* Search bar */}
       <div className="sv-card flex items-center px-4 py-3 gap-3">
         <span className="text-neon-green font-mono text-sm">&gt;</span>
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="SEARCH_TXID_OR_ADDRESS..."
+          placeholder="Search by txid or address..."
           className="flex-1 bg-transparent text-cyber-muted font-mono text-sm focus:outline-none placeholder:text-cyber-muted/30" />
         <span className="w-0.5 h-5 bg-neon-green sv-cursor" />
       </div>
 
       {broadcastResult && (
         <div className="sv-card px-4 py-3 border-l-2 border-l-neon-green text-neon-green font-mono text-xs">
-          [SUCCESS] BROADCAST_COMPLETE — TXID: {ellipsis(broadcastResult, 12, 12)}
+          Transaction broadcast — TXID: {ellipsis(broadcastResult, 12, 12)}
         </div>
       )}
 
@@ -312,7 +289,7 @@ export default function TransactionsPage() {
       {/* Table header */}
       <div className="sv-card overflow-hidden">
         <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-cyber-border text-[10px] font-mono text-cyber-muted uppercase tracking-wider">
-          <span className="flex-1">TRANSACTION_ID (HASH)</span>
+          <span className="flex-1">Transaction ID</span>
           <span className="w-28 text-right">AMOUNT</span>
           <span className="w-28 text-right">TIMESTAMP</span>
           <span className="w-24 text-right">STATUS</span>
@@ -327,14 +304,14 @@ export default function TransactionsPage() {
         ))}
 
         {data?.transactions?.length === 0 && (
-          <div className="px-4 py-10 text-center text-cyber-muted font-mono text-sm">NO_TRANSACTIONS_FOUND</div>
+          <div className="px-4 py-10 text-center text-cyber-muted font-mono text-sm">No transactions yet</div>
         )}
 
         {/* Pagination */}
         {data && data.total > 0 && (
           <div className="px-4 py-3 border-t border-cyber-border flex items-center justify-between">
             <span className="text-[10px] font-mono text-cyber-muted tracking-wider">
-              SHOWING 1-{data.transactions?.length || 0} OF {data.total} ENTRIES
+              Showing {data.transactions?.length || 0} of {data.total}
             </span>
             <div className="flex gap-1">
               <button className="w-8 h-8 rounded border border-cyber-border text-xs font-mono text-cyber-muted hover:text-cyber-text">‹</button>

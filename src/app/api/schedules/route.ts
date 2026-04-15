@@ -43,7 +43,13 @@ export async function POST(req: NextRequest) {
     });
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-    const nextRun = parseExpression(data.cronExpression, { tz: data.timezone }).next().toDate();
+    // Compute interval from cron so each schedule gets its own independent timer
+    // (not snapped to wall-clock boundaries like :00, :10, :20)
+    const expr = parseExpression(data.cronExpression, { tz: data.timezone });
+    const first = expr.next().toDate();
+    const second = expr.next().toDate();
+    const intervalMs = second.getTime() - first.getTime();
+    const nextRun = new Date(Date.now() + intervalMs);
 
     const schedule = await prisma.paymentSchedule.create({
       data: {
@@ -56,6 +62,7 @@ export async function POST(req: NextRequest) {
         cronExpression: data.cronExpression,
         timezone: data.timezone,
         maxFeeRate: data.maxFeeRate,
+        rbfEnabled: data.rbfEnabled,
         nextRunAt: nextRun,
       },
     });

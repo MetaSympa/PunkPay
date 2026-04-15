@@ -8,7 +8,7 @@ import { deriveAddress, type AddressType } from '../bitcoin/hd-wallet';
 import { syncWalletUtxos } from '../bitcoin/sync';
 import { decrypt } from '../crypto/encryption';
 import { signPsbt, broadcastTx } from '../bitcoin/signing';
-import { sendTelegramMessage } from '../telegram/client';
+import { sendSignalMessage } from '../signal/client';
 
 export interface PaymentJobData {
   scheduleId: string;
@@ -220,12 +220,18 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     data: { nextChangeIndex: { increment: 1 } },
   });
 
-  // Update schedule timing
+  // Update schedule timing — compute interval so each schedule keeps its own independent cadence
   const { parseExpression } = await import('cron-parser');
   const sched = await prisma.paymentSchedule.findUnique({ where: { id: scheduleId } });
   if (sched) {
     let nextRunAt: Date | null = null;
-    try { nextRunAt = parseExpression(sched.cronExpression, { tz: sched.timezone }).next().toDate(); } catch {}
+    try {
+      const expr = parseExpression(sched.cronExpression, { tz: sched.timezone });
+      const first = expr.next().toDate();
+      const second = expr.next().toDate();
+      const intervalMs = second.getTime() - first.getTime();
+      nextRunAt = new Date(Date.now() + intervalMs);
+    } catch {}
     await prisma.paymentSchedule.update({
       where: { id: scheduleId },
       data: { lastRunAt: new Date(), ...(nextRunAt && { nextRunAt }) },
@@ -303,6 +309,6 @@ export async function handleTxMonitor(job: Job<TxMonitorJobData>): Promise<void>
  */
 export async function handleNotification(job: Job<NotificationJobData>): Promise<void> {
   const { recipientNumber, message } = job.data;
-  await sendTelegramMessage(recipientNumber, message);
+  await sendSignalMessage(recipientNumber, message);
   job.log(`Notification sent to ${recipientNumber}`);
 }

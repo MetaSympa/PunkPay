@@ -51,17 +51,17 @@ function IconExpenses({ active }: { active: boolean }) {
 /* ── Layout config ────────────────────────────────────────────────────── */
 
 const payerNav = [
-  { href: '/overview',      label: 'TERMINAL',  icon: IconTerminal },
-  { href: '/wallet',        label: 'NODES',     icon: IconNodes },
-  { href: '/schedules',     label: 'AUTOPAY',   icon: IconAutoPay },
-  { href: '/expenses',      label: 'CLAIMS',    icon: IconExpenses },
-  { href: '/transactions',  label: 'LOGS',      icon: IconLogs },
+  { href: '/overview',      label: 'Dashboard',   icon: IconTerminal },
+  { href: '/wallet',        label: 'Wallets',     icon: IconNodes },
+  { href: '/schedules',     label: 'Schedules',   icon: IconAutoPay },
+  { href: '/expenses',      label: 'Expenses',    icon: IconExpenses },
+  { href: '/transactions',  label: 'Transactions', icon: IconLogs },
 ];
 
 const recipientNav = [
-  { href: '/overview',  label: 'TERMINAL',  icon: IconTerminal },
-  { href: '/wallet',    label: 'NODES',     icon: IconNodes },
-  { href: '/expenses',  label: 'CLAIMS',    icon: IconExpenses },
+  { href: '/overview',  label: 'Dashboard',  icon: IconTerminal },
+  { href: '/wallet',    label: 'Wallets',    icon: IconNodes },
+  { href: '/expenses',  label: 'Expenses',   icon: IconExpenses },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -80,7 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (status === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <span className="text-neon-green font-mono text-sm animate-pulse">INITIALIZING_SYSTEM...</span>
+        <span className="text-neon-green font-mono text-sm animate-pulse">Loading...</span>
       </div>
     );
   }
@@ -103,12 +103,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-xs font-mono text-cyber-muted hidden sm:block">
-              SYSTEM_HEALTH: <span className="text-neon-green">OPTIMAL</span>
-            </span>
-            <span className="text-xs font-mono text-neon-amber hidden sm:block">
-              LATENCY: {latency}MS
-            </span>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
               className="text-cyber-muted hover:text-neon-red font-mono text-xs transition-colors"
@@ -148,7 +142,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }`}
               >
                 <Icon active={isActive} />
-                <span className="text-[10px] font-mono tracking-wider">{item.label}</span>
+                <span className="text-[9px] font-mono tracking-wide">{item.label}</span>
               </Link>
             );
           })}

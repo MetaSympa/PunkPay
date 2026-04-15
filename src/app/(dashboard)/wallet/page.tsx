@@ -123,7 +123,7 @@ function WalletCard({ wallet, onDelete, deleting }: { wallet: any; onDelete: () 
           <p className="text-sm font-mono text-cyber-text mt-0.5">{wallet._count.utxos}</p>
         </div>
         <div>
-          <p className="sv-stat-label">FINGERPRINT</p>
+          <p className="sv-stat-label">xPub</p>
           <p className="text-xs font-mono text-cyber-muted mt-0.5">{wallet.xpubFingerprint}</p>
         </div>
       </div>
@@ -131,15 +131,16 @@ function WalletCard({ wallet, onDelete, deleting }: { wallet: any; onDelete: () 
       {/* Actions */}
       <div className="px-5 py-3 border-t border-cyber-border/50 flex gap-2 flex-wrap">
         <Link href={`/wallet/${wallet.id}`}>
-          <NeonButton variant="green" size="sm">VERIFY</NeonButton>
+          <NeonButton variant="green" size="sm">Details</NeonButton>
         </Link>
         <NeonButton variant="ghost" size="sm" onClick={syncNow} loading={isSyncing}>
-          {isSyncing ? 'SYNCING...' : 'SYNC'}
+          {isSyncing ? 'Syncing...' : 'Sync'}
         </NeonButton>
+        <div className="flex-1" />
         <NeonButton variant="red" size="sm"
-          onClick={() => { if (confirm('Delete this wallet?')) onDelete(); }}
+          onClick={() => { if (confirm('Delete this wallet? This cannot be undone.')) onDelete(); }}
           loading={deleting}>
-          DELETE
+          Delete
         </NeonButton>
       </div>
     </div>
@@ -204,9 +205,9 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
         {/* Tabs */}
         <div className="flex border-b border-cyber-border">
           {([
-            { id: 'xpub' as ModalMode, label: 'IMPORT_XPUB' },
-            { id: 'seed-generate' as ModalMode, label: 'NEW_SEED' },
-            { id: 'seed-import' as ModalMode, label: 'IMPORT_SEED' },
+            { id: 'xpub' as ModalMode, label: 'Watch-only' },
+            { id: 'seed-generate' as ModalMode, label: 'New Wallet' },
+            { id: 'seed-import' as ModalMode, label: 'Import Wallet' },
           ]).map(t => (
             <button key={t.id} onClick={() => { setMode(t.id); setSErr(''); setXErr(''); }}
               className={`flex-1 py-3 text-[10px] font-mono tracking-wider transition-all ${
@@ -277,7 +278,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={backedUp} onChange={e => setBackedUp(e.target.checked)} className="accent-[#00FF41]" />
-                    <span className="text-xs font-mono text-cyber-muted">I_HAVE_BACKED_UP_MY_SEED_PHRASE</span>
+                    <span className="text-xs font-mono text-cyber-muted">I have backed up my seed phrase offline</span>
                   </label>
                 </>
               )}
@@ -378,9 +379,9 @@ function RecipientWalletPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="sv-section-header">
-          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">SYSTEM_STATUS: ACTIVE</p>
+          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">Wallets</p>
           <h1 className="text-3xl font-mono font-bold text-cyber-text tracking-tight mt-1">
-            NODES_INDEX
+            My Wallets
           </h1>
         </div>
         <NeonButton variant="primary" size="sm" onClick={() => setShowAdd(true)} disabled={maxReached}>
@@ -411,7 +412,7 @@ function RecipientWalletPage() {
       {/* Payment profile */}
       <div className="sv-card overflow-hidden">
         <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-neon-amber flex items-center justify-between">
-          <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">PAYMENT_PROFILE</span>
+          <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">Receive Profile</span>
           <NeonButton variant="ghost" size="sm" onClick={() => { setShowProfileForm(v => !v); setProfileMsg(''); }}>
             {showProfileForm ? 'CANCEL' : profile ? 'UPDATE' : 'SET UP'}
           </NeonButton>
@@ -425,7 +426,7 @@ function RecipientWalletPage() {
         )}
         {!profile && !showProfileForm && (
           <p className="px-4 py-4 text-xs font-mono text-cyber-muted">
-            REGISTER_XPUB_FOR_AUTOMATIC_TAPROOT_ADDRESS_ROTATION
+            Link your xPub to auto-rotate receive addresses with each payment
           </p>
         )}
         {showProfileForm && (
@@ -478,13 +479,13 @@ function PayerWalletPage() {
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div className="sv-section-header">
-          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">SYSTEM_STATUS: ACTIVE</p>
-          <h1 className="text-3xl font-mono font-bold text-cyber-text tracking-tight mt-1">NODES_INDEX</h1>
+          <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">Wallets</p>
+          <h1 className="text-3xl font-mono font-bold text-cyber-text tracking-tight mt-1">My Wallets</h1>
         </div>
         <div className="text-right">
           <p className="text-[11px] text-neon-green font-mono uppercase tracking-[0.15em]">TOTAL_VALUE: {(totalBtc / 1e8).toFixed(6)} BTC</p>
           <p className="text-[10px] text-cyber-muted font-mono tracking-wider mt-0.5">
-            UPTIME: 99.998% // BLOCK: 842,109
+            {(totalBtc / 1e8).toFixed(6)} BTC total
           </p>
         </div>
       </div>
@@ -492,8 +493,8 @@ function PayerWalletPage() {
       {/* Tabs */}
       <div className="flex gap-0 border-b border-cyber-border">
         {([
-          { id: 'wallet' as const, label: 'FUNDING_WALLET' },
-          { id: 'recipients' as const, label: `RECIPIENTS (${recipients?.length ?? 0})` },
+          { id: 'wallet' as const, label: 'My Wallets' },
+          { id: 'recipients' as const, label: `Recipients (${recipients?.length ?? 0})` },
         ]).map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2.5 text-xs font-mono tracking-wider transition-all ${

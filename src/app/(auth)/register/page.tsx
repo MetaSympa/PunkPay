@@ -1,96 +1,75 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { NeonButton } from '@/components/ui/neon-button';
 
-type AuthMethod = 'password' | 'telegram';
-type TelegramStep = 'link' | 'otp' | 'done';
+type FieldErrors = Record<string, string[]>;
+
+const PW_RULES = [
+  { label: 'At least 12 characters', test: (p: string) => p.length >= 12 },
+  { label: 'Uppercase letter',        test: (p: string) => /[A-Z]/.test(p) },
+  { label: 'Lowercase letter',        test: (p: string) => /[a-z]/.test(p) },
+  { label: 'Number',                  test: (p: string) => /[0-9]/.test(p) },
+  { label: 'Special character',       test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+];
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [method, setMethod] = useState<AuthMethod>('telegram');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'PAYER' | 'RECIPIENT'>('RECIPIENT');
-  const [error, setError] = useState('');
+  const [generalError, setGeneralError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
-
-  const [tgStep, setTgStep] = useState<TelegramStep>('link');
-  const [botUrl, setBotUrl] = useState('');
-  const [linkToken, setLinkToken] = useState('');
-  const [tgUsername, setTgUsername] = useState('');
-  const [tgChatId, setTgChatId] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
-
-  async function startLink() {
-    setError(''); setLoading(true);
-    try {
-      const res = await fetch('/api/auth/telegram-link');
-      const data = await res.json();
-      setLinkToken(data.token); setBotUrl(data.botUrl);
-      window.open(data.botUrl, '_blank');
-      pollRef.current = setInterval(async () => {
-        const check = await fetch('/api/auth/telegram-link', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: data.token }),
-        });
-        const result = await check.json();
-        if (result.linked) {
-          clearInterval(pollRef.current!);
-          setTgUsername(result.username); setTgChatId(result.chatId); setTgStep('otp');
-        }
-      }, 2000);
-    } catch { setError('LINK_FAILED'); } finally { setLoading(false); }
-  }
-
-  useEffect(() => { return () => { if (pollRef.current) clearInterval(pollRef.current); }; }, []);
-
-  async function handleSendOtp() {
-    setError(''); setLoading(true);
-    try {
-      const res = await fetch('/api/auth/send-otp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramChatId: tgChatId, purpose: 'register' }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-    } catch { setError('OTP_SEND_FAILED'); } finally { setLoading(false); }
-  }
-
-  async function handleTelegramRegister(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setLoading(true);
-    try {
-      const res = await fetch('/api/auth/verify-otp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramChatId: tgChatId, code: otpCode, purpose: 'register', email, role }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      router.push('/login');
-    } catch { setError('REGISTRATION_FAILED'); } finally { setLoading(false); }
-  }
+  const [pwFocused, setPwFocused] = useState(false);
 
   async function handlePasswordRegister(e: React.FormEvent) {
-    e.preventDefault(); setError('');
-    if (password !== confirmPassword) { setError('PASSWORDS_DO_NOT_MATCH'); return; }
+    e.preventDefault();
+    setGeneralError('');
+    setFieldErrors({});
+
+    if (password !== confirmPassword) {
+      setFieldErrors({ confirmPassword: ['Passwords do not match'] });
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/auth/register', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role }),
       });
+
       if (!res.ok) {
         const data = await res.json();
-        setError(data.details?.map((d: any) => d.message).join(' · ') || data.error || 'REGISTRATION_FAILED');
+        if (data.issues?.length) {
+          const errs: FieldErrors = {};
+          for (const { path, message } of data.issues) {
+            const key = path || 'general';
+            if (!errs[key]) errs[key] = [];
+            errs[key].push(message);
+          }
+          setFieldErrors(errs);
+        } else {
+          setGeneralError(data.error || 'REGISTRATION_FAILED');
+        }
         return;
       }
+
       router.push('/login');
-    } catch { setError('CONNECTION_ERROR'); } finally { setLoading(false); }
+    } catch {
+      setGeneralError('CONNECTION_ERROR');
+    } finally {
+      setLoading(false);
+    }
   }
+
+  const pwRulesVisible = pwFocused || password.length > 0;
+  const allRulesMet = PW_RULES.every(r => r.test(password));
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4 relative">
@@ -113,18 +92,6 @@ export default function RegisterPage() {
             <p className="text-cyber-muted text-xs font-mono mt-2 tracking-wider">CREATE_YOUR_IDENTITY</p>
           </div>
 
-          {/* Method toggle */}
-          <div className="flex rounded overflow-hidden border border-cyber-border">
-            <button type="button" onClick={() => { setMethod('telegram'); setError(''); }}
-              className={`flex-1 py-2.5 text-xs font-mono tracking-wider transition-all ${method === 'telegram' ? 'bg-neon-green text-cyber-bg font-semibold' : 'text-cyber-muted hover:text-cyber-text bg-cyber-surface'}`}>
-              ⚡ TELEGRAM
-            </button>
-            <button type="button" onClick={() => { setMethod('password'); setError(''); }}
-              className={`flex-1 py-2.5 text-xs font-mono tracking-wider transition-all ${method === 'password' ? 'bg-neon-green text-cyber-bg font-semibold' : 'text-cyber-muted hover:text-cyber-text bg-cyber-surface'}`}>
-              🔑 PASSWORD
-            </button>
-          </div>
-
           {/* Role selector */}
           <div>
             <label className="sv-label">ROLE</label>
@@ -140,88 +107,77 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Telegram flow */}
-          {method === 'telegram' && (
-            <>
-              {tgStep === 'link' && (
-                <div className="space-y-4">
-                  <p className="text-xs text-cyber-muted font-mono text-center tracking-wider">
-                    LINK_TELEGRAM_TO_GET_STARTED
-                  </p>
-                  <NeonButton type="button" variant="primary" className="w-full" loading={loading} onClick={startLink}>
-                    OPEN @PUNKPAYBOT
-                  </NeonButton>
-                  {botUrl && (
-                    <div className="text-center space-y-2">
-                      <div className="flex items-center gap-2 justify-center">
-                        <span className="w-2 h-2 bg-neon-amber rounded-full animate-pulse" />
-                        <span className="text-xs text-neon-amber font-mono">WAITING_FOR_BOT_MESSAGE...</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+          <form onSubmit={handlePasswordRegister} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label className="sv-label">EMAIL</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className={`sv-input text-neon-green ${fieldErrors.email ? 'border-neon-red' : ''}`}
+                required
+              />
+              {fieldErrors.email && (
+                <p className="mt-1 text-[11px] font-mono text-neon-red">{fieldErrors.email.join(' · ')}</p>
               )}
-              {tgStep === 'otp' && (
-                <form onSubmit={handleTelegramRegister} className="space-y-4">
-                  <div className="sv-card px-3 py-2.5 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-neon-green rounded-full" />
-                    <span className="text-sm text-neon-green font-mono">@{tgUsername}</span>
-                    <span className="text-[10px] text-cyber-muted font-mono ml-auto tracking-wider">LINKED</span>
-                  </div>
-                  <div>
-                    <label className="sv-label">EMAIL</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                      className="sv-input text-neon-green" required />
-                  </div>
-                  {!otpCode && (
-                    <NeonButton type="button" variant="amber" className="w-full" loading={loading} onClick={handleSendOtp}>
-                      SEND OTP TO TELEGRAM
-                    </NeonButton>
-                  )}
-                  <div>
-                    <label className="sv-label">OTP_CODE</label>
-                    <input type="text" value={otpCode}
-                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="000000"
-                      className="sv-input text-center text-xl tracking-[0.5em] text-neon-green"
-                      maxLength={6} required />
-                  </div>
-                  <NeonButton type="submit" variant="primary" className="w-full" loading={loading}>
-                    VERIFY &amp; REGISTER
-                  </NeonButton>
-                </form>
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="sv-label">PASSWORD</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onFocus={() => setPwFocused(true)}
+                onBlur={() => setPwFocused(false)}
+                className={`sv-input text-neon-green ${fieldErrors.password ? 'border-neon-red' : ''}`}
+                required
+              />
+              {fieldErrors.password && (
+                <p className="mt-1 text-[11px] font-mono text-neon-red">{fieldErrors.password.join(' · ')}</p>
               )}
-            </>
-          )}
+              {/* Password requirements checklist */}
+              {pwRulesVisible && !allRulesMet && (
+                <ul className="mt-2 space-y-0.5">
+                  {PW_RULES.map(rule => {
+                    const ok = rule.test(password);
+                    return (
+                      <li key={rule.label} className={`text-[11px] font-mono flex items-center gap-1.5 ${ok ? 'text-neon-green' : 'text-cyber-muted'}`}>
+                        <span>{ok ? '✓' : '○'}</span>
+                        {rule.label}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
 
-          {/* Password form */}
-          {method === 'password' && (
-            <form onSubmit={handlePasswordRegister} className="space-y-4">
-              <div>
-                <label className="sv-label">EMAIL</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  className="sv-input text-neon-green" required />
-              </div>
-              <div>
-                <label className="sv-label">PASSWORD</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                  placeholder="Min 12 chars, upper, lower, number, special"
-                  className="sv-input text-neon-green" required />
-              </div>
-              <div>
-                <label className="sv-label">CONFIRM_PASSWORD</label>
-                <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                  className="sv-input text-neon-green" required />
-              </div>
-              <NeonButton type="submit" variant="primary" className="w-full" loading={loading}>
-                INITIALIZE IDENTITY
-              </NeonButton>
-            </form>
-          )}
+            {/* Confirm password */}
+            <div>
+              <label className="sv-label">CONFIRM_PASSWORD</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                className={`sv-input text-neon-green ${fieldErrors.confirmPassword ? 'border-neon-red' : ''}`}
+                required
+              />
+              {fieldErrors.confirmPassword && (
+                <p className="mt-1 text-[11px] font-mono text-neon-red">{fieldErrors.confirmPassword.join(' · ')}</p>
+              )}
+            </div>
 
-          {error && (
+            <NeonButton type="submit" variant="primary" className="w-full" loading={loading}>
+              INITIALIZE IDENTITY
+            </NeonButton>
+          </form>
+
+          {/* General / server error */}
+          {generalError && (
             <div className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2.5">
-              [ERROR] {error}
+              [ERROR] {generalError}
             </div>
           )}
 

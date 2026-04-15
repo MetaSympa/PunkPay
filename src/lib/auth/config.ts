@@ -29,10 +29,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Signal-only users can't login with password
         if (user.passwordHash === '__signal_otp_user__') return null;
 
-        const valid = await argon2.verify(
-          user.passwordHash,
-          credentials.password as string
-        );
+        let valid = false;
+        try {
+          valid = await argon2.verify(user.passwordHash, credentials.password as string);
+        } catch (e) {
+          console.error('[auth] argon2.verify threw:', e);
+          return null;
+        }
         if (!valid) return null;
 
         // If TOTP is enabled, verify the code
@@ -42,41 +45,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const isValidTotp = TOTPAuth.verify(user.totpSecret, credentials.totpCode as string);
           if (!isValidTotp) return null;
         }
-
-        return {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-        };
-      },
-    }),
-    Credentials({
-      id: 'telegram-otp',
-      name: 'Telegram OTP',
-      credentials: {
-        telegramChatId: { label: 'Telegram Chat ID', type: 'text' },
-        code: { label: 'OTP Code', type: 'text' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.telegramChatId || !credentials?.code) return null;
-
-        const { otpStore } = await import('@/app/api/auth/send-otp/route');
-
-        const stored = otpStore.get(credentials.telegramChatId as string);
-        if (!stored) return null;
-        if (Date.now() > stored.expiresAt) {
-          otpStore.delete(credentials.telegramChatId as string);
-          return null;
-        }
-        if (stored.code !== credentials.code) return null;
-
-        otpStore.delete(credentials.telegramChatId as string);
-
-        const user = await prisma.user.findFirst({
-          where: { signalNumber: credentials.telegramChatId as string },
-        });
-
-        if (!user) return null;
 
         return {
           id: user.id,

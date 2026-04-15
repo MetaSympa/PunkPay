@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { syncWalletUtxos } from '@/lib/bitcoin/sync';
+import { applyRateLimit, SYNC_RATE_LIMIT } from '@/lib/api-utils';
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ walletId: string }> }
 ) {
+  const rateLimited = applyRateLimit(req, 'wallet-sync', SYNC_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
+
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

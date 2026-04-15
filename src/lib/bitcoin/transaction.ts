@@ -6,6 +6,8 @@ bitcoin.initEccLib(ecc);
 
 // RBF sequence number (enables replace-by-fee)
 const RBF_SEQUENCE = 0xfffffffd;
+// Final sequence number (no replacement allowed)
+const FINAL_SEQUENCE = 0xffffffff;
 
 export interface PsbtInput {
   txid: string;
@@ -42,7 +44,8 @@ export function calculateFee(numInputs: number, numOutputs: number, feeRate: num
 export function buildPsbt(
   inputs: PsbtInput[],
   outputs: PsbtOutput[],
-  network?: string
+  network?: string,
+  rbfEnabled = true
 ): bitcoin.Psbt {
   const net = getNetwork(network);
   const psbt = new bitcoin.Psbt({ network: net });
@@ -51,7 +54,7 @@ export function buildPsbt(
     psbt.addInput({
       hash: input.txid,
       index: input.vout,
-      sequence: RBF_SEQUENCE,
+      sequence: rbfEnabled ? RBF_SEQUENCE : FINAL_SEQUENCE,
       witnessUtxo: {
         script: Buffer.from(input.scriptPubKey, 'hex'),
         value: input.valueSats,

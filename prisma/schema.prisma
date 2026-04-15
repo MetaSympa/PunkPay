@@ -48,6 +48,11 @@ enum AddressChain {
   INTERNAL
 }
 
+enum PaymentMethod {
+  ONCHAIN
+  LIGHTNING
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -58,6 +63,8 @@ model User {
   totpEnabled   Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  encryptedNwcString String?   // Encrypted Nostr Wallet Connect connection string
 
   wallets       Wallet[]
   schedules     PaymentSchedule[]  @relation("ScheduleCreator")
@@ -165,13 +172,13 @@ model Transaction {
 }
 
 model RecipientProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  xpub      String
-  network   String   @default("mainnet")
-  label     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  xpub            String
+  network         String   @default("mainnet")
+  label           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -186,10 +193,12 @@ model PaymentSchedule {
   recipientXpub    String?
   recipientXpubIndex Int     @default(0)
   recipientName    String?
+  paymentMethod    PaymentMethod @default(ONCHAIN)
   amountSats       BigInt
   cronExpression   String
   timezone         String    @default("UTC")
   maxFeeRate       Float     @default(50)
+  rbfEnabled       Boolean   @default(false)
   isActive         Boolean   @default(true)
   encryptedSeed    String?
   lastRunAt        DateTime?

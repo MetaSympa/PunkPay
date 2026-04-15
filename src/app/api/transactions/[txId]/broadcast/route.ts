@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { broadcastTx } from '@/lib/bitcoin/signing';
 import { z } from 'zod';
+import * as bitcoin from 'bitcoinjs-lib';
 
 const schema = z.object({ rawHex: z.string().min(10) });
 
@@ -33,11 +34,20 @@ export async function POST(
       data: { txid, status: 'BROADCAST', psbt: null, broadcastAt: new Date() },
     });
 
-    // Mark UTXOs as spent (best-effort: match by wallet)
-    await prisma.utxo.updateMany({
-      where: { walletId: tx.walletId, isLocked: true },
-      data: { status: 'SPENT', isLocked: false },
-    });
+    // Parse the raw transaction to identify exactly which UTXOs were consumed
+    const parsedTx = bitcoin.Transaction.fromHex(rawHex);
+    const spentOutpoints = parsedTx.ins.map(inp => ({
+      txid: Buffer.from(inp.hash).reverse().toString('hex'),
+      vout: inp.index,
+    }));
+
+    // Mark only the UTXOs actually spent in this transaction
+    for (const outpoint of spentOutpoints) {
+      await prisma.utxo.updateMany({
+        where: { walletId: tx.walletId, txid: outpoint.txid, vout: outpoint.vout },
+        data: { status: 'SPENT', isLocked: false },
+      });
+    }
 
     return NextResponse.json({ txid });
   } catch (error: any) {

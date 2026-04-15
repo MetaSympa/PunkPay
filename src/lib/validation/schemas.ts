@@ -43,6 +43,7 @@ export const createScheduleSchema = z.object({
   cronExpression: z.string().min(9).max(100),
   timezone: z.string().default('UTC'),
   maxFeeRate: z.number().positive().default(50),
+  rbfEnabled: z.boolean().default(false),
 }).refine(d => d.recipientAddress || d.recipientXpub, {
   message: 'Either recipientAddress or recipientXpub is required',
 });
