@@ -62,8 +62,7 @@ export async function POST(req: NextRequest) {
 
     const encryptedXpub = encrypt(data.xpub);
     const fingerprint = getXpubFingerprint(data.xpub);
-    const addressType = data.addressType ?? 'P2TR';
-    const derivationPath = addressType === 'P2WPKH' ? "m/84'/0'/0'" : "m/86'/0'/0'";
+    const derivationPath = "m/86'/0'/0'"; // P2TR (Taproot) only
 
     const wallet = await prisma.wallet.create({
       data: {
@@ -72,13 +71,13 @@ export async function POST(req: NextRequest) {
         encryptedXpub,
         xpubFingerprint: fingerprint,
         network: data.network,
-        addressType,
+        addressType: 'P2TR',
         derivationPath,
       },
     });
 
     // Pre-derive first 20 receive addresses
-    const addresses = deriveAddresses(data.xpub, 0, 0, 20, data.network, addressType);
+    const addresses = deriveAddresses(data.xpub, 0, 0, 20, data.network, 'P2TR');
     await prisma.address.createMany({
       data: addresses.map(a => ({
         walletId: wallet.id,

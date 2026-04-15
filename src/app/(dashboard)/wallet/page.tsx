@@ -159,7 +159,6 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
   const [xName, setXName] = useState('');
   const [xKey, setXKey] = useState('');
   const [xNetwork, setXNetwork] = useState('mainnet');
-  const [xAddrType, setXAddrType] = useState('P2TR');
   const [xErr, setXErr] = useState('');
 
   const [sName, setSName] = useState('');
@@ -183,7 +182,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
   async function handleXpub(e: React.FormEvent) {
     e.preventDefault(); setXErr('');
     try {
-      await importWallet.mutateAsync({ name: xName, xpub: xKey.trim(), network: xNetwork, addressType: xAddrType });
+      await importWallet.mutateAsync({ name: xName, xpub: xKey.trim(), network: xNetwork, addressType: 'P2TR' });
       onClose();
     } catch (err: any) { setXErr(err.message); }
   }
@@ -244,10 +243,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
                 </div>
                 <div>
                   <label className="sv-label">TYPE</label>
-                  <select value={xAddrType} onChange={e => setXAddrType(e.target.value)} className="sv-input">
-                    <option value="P2TR">P2TR (bc1p)</option>
-                    <option value="P2WPKH">P2WPKH (bc1q)</option>
-                  </select>
+                  <div className="sv-input text-neon-green/70 select-none cursor-default">P2TR — Taproot</div>
                 </div>
               </div>
               {xErr && <div className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2">[ERROR] {xErr}</div>}

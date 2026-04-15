@@ -24,7 +24,7 @@ export const importXpubSchema = z.object({
   name: z.string().min(1).max(100),
   xpub: z.string().regex(xpubRegex, 'Invalid xpub format'),
   network: z.enum(['mainnet', 'testnet', 'signet', 'regtest']).default('mainnet'),
-  addressType: z.enum(['P2TR', 'P2WPKH']).default('P2TR'),
+  addressType: z.literal('P2TR').default('P2TR'),
 });
 
 export const sendPaymentSchema = z.object({
@@ -57,8 +57,8 @@ export const submitExpenseSchema = z.object({
 });
 
 export const approveExpenseSchema = z.object({
-  expenseId: z.string().cuid(),
   action: z.enum(['approve', 'reject']),
+  walletId: z.string().cuid().optional(), // hot wallet for auto-broadcast on approve
 });
 
 export const feeBumpSchema = z.object({

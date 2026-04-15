@@ -1,5 +1,6 @@
-version: '3.9'
 services:
+  # ─── Infrastructure ──────────────────────────────────────────────────────────
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -45,6 +46,53 @@ services:
       - '8080:8080'
     volumes:
       - signal-cli-config:/home/.local/share/signal-cli
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ─── Application ─────────────────────────────────────────────────────────────
+
+  app:
+    build:
+      context: .
+      target: app
+    ports:
+      - '3000:3000'
+    env_file: .env
+    environment:
+      # Override localhost URLs from .env with container-network hostnames
+      DATABASE_URL: postgresql://punkpay:punkpay_dev@postgres:5432/punkpay
+      REDIS_URL: redis://redis:6379
+      SIGNAL_API_URL: http://signal-cli:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  worker:
+    build:
+      context: .
+      target: worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://punkpay:punkpay_dev@postgres:5432/punkpay
+      REDIS_URL: redis://redis:6379
+      SIGNAL_API_URL: http://signal-cli:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app:
+        condition: service_started   # ensures schema push runs before workers hit DB
+    restart: unless-stopped
     deploy:
       resources:
         limits:

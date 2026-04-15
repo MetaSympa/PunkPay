@@ -42,6 +42,13 @@ async function stopScheduleWithError(scheduleId: string, errorMsg: string) {
   console.error(`[scheduler] Schedule ${scheduleId} stopped: ${errorMsg}`);
 }
 
+// Extract txid from a mempool RBF rejection error message, e.g.:
+// "insufficient fee, rejecting replacement <txid>; new feerate ..."
+function extractRbfTxid(msg: string): string | null {
+  const m = msg.match(/rejecting replacement ([0-9a-f]{64})/i);
+  return m ? m[1] : null;
+}
+
 /**
  * Execute a scheduled payment
  */
@@ -49,6 +56,17 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   const { scheduleId, walletId, amountSats, maxFeeRate } = job.data;
   const amount = BigInt(amountSats);
   try {
+
+  // Skip this run if a broadcast-pending tx already exists for the schedule.
+  // This prevents double-spend retries that would trigger RBF rejection.
+  const pendingBroadcast = await prisma.transaction.findFirst({
+    where: { scheduleId, status: 'BROADCAST' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (pendingBroadcast) {
+    job.log(`[scheduler] Skipping: pending tx ${pendingBroadcast.txid} already in mempool for schedule ${scheduleId}`);
+    return;
+  }
 
   // Release expired UTXO locks
   await prisma.utxo.updateMany({
@@ -169,8 +187,23 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       return { chain: d.chain, index: d.index };
     });
     const rawHex = await signPsbt(psbtBase64, mnemonic, inputPaths, addrType, wallet.network);
-    broadcastedTxid = await broadcastTx(rawHex, wallet.network);
-    txStatus = 'BROADCAST';
+
+    try {
+      broadcastedTxid = await broadcastTx(rawHex, wallet.network);
+      txStatus = 'BROADCAST';
+    } catch (broadcastErr: any) {
+      const errMsg: string = broadcastErr.message ?? String(broadcastErr);
+      const rbfTxid = extractRbfTxid(errMsg);
+      if (rbfTxid) {
+        // TX already in mempool (retry hit an existing unconfirmed tx with same inputs).
+        // Treat the original broadcast as the canonical one — record it and move on.
+        job.log(`[scheduler] RBF rejection: tx ${rbfTxid} already in mempool. Adopting it.`);
+        broadcastedTxid = rbfTxid;
+        txStatus = 'BROADCAST';
+      } else {
+        throw broadcastErr;
+      }
+    }
 
     // Mark UTXOs as spent
     const selectedIds = wallet.utxos

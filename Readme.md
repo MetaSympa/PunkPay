@@ -34,69 +34,116 @@ udit trail.
 
 ## Prerequisites
 
-- Node.js 20+
-- Docker (for postgres, redis, signal-cli)
+- Docker + Docker Compose
+
+That's it. No local Node.js required for the fully-containerized setup.
+
+> For local development (hot reload), you also need Node.js 20+.
 
 ---
 
-## Local Setup
+## Quickstart — Full Docker (recommended)
 
-### 1. Clone and install
+Everything — frontend, API, workers, Postgres, Redis, Signal CLI — runs in containers.
+
+### 1. Clone
 
 ```bash
 git clone <repo>
 cd punkpay
-npm install
 ```
 
 ### 2. Configure environment
 
-Copy `.env.example` to `.env` and fill in the values:
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in the secrets. The infra URLs (`DATABASE_URL`, `REDIS_URL`, `SIGNAL_API_URL`) are automatically overridden by Docker Compose to use container hostnames — you only need to set them for local dev:
 
 ```env
-# Database
-DATABASE_URL=postgresql://punkpay:punkpay_dev@localhost:5432/punkpay
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# NextAuth
-AUTH_SECRET=<random-64-char-string>
+# NextAuth — keep as localhost (browser-facing)
+AUTH_SECRET=<random-secret>        # openssl rand -base64 32
 AUTH_URL=http://localhost:3000
 
-# Bitcoin
+# Bitcoin (Mutinynet Signet for testing)
 BITCOIN_NETWORK=signet
-MEMPOOL_API_URL=https://mempool.space/signet/api
+MEMPOOL_API_URL=https://mutinynet.com/api
+MEMPOOL_WS_URL=wss://mutinynet.com/api/v1/ws
 
-# Encryption (AES-256-GCM master key — 64 hex chars)
-MASTER_ENCRYPTION_KEY=<64-char-hex-string>
+# Encryption — 64 hex chars
+MASTER_ENCRYPTION_KEY=<hex-key>    # openssl rand -hex 32
 
 # Signal (optional)
+SIGNAL_SENDER_NUMBER=+1234567890
+```
+
+### 3. Build and start
+
+```bash
+npm run docker:up:full
+```
+
+This builds the images and starts all 5 services. The `app` container automatically runs `prisma db push` before booting, so the schema is always up to date.
+
+Visit **http://localhost:3000**.
+
+### 4. Watch logs
+
+```bash
+npm run docker:logs          # app + worker logs
+docker compose logs -f       # all services
+```
+
+### 5. Stop
+
+```bash
+npm run docker:down
+```
+
+---
+
+## Local Development (hot reload)
+
+Run infra in Docker, app + worker on your machine.
+
+### 1. Start infra only
+
+```bash
+npm run docker:up            # starts postgres, redis, signal-cli only
+```
+
+### 2. Configure environment
+
+Copy `.env.example` to `.env`. Use the local dev URLs:
+
+```env
+DATABASE_URL=postgresql://punkpay:punkpay_dev@localhost:5433/punkpay
+REDIS_URL=redis://localhost:6379
+AUTH_URL=http://localhost:3000
+BITCOIN_NETWORK=signet
+MEMPOOL_API_URL=https://mutinynet.com/api
+MEMPOOL_WS_URL=wss://mutinynet.com/api/v1/ws
+AUTH_SECRET=<random-secret>
+MASTER_ENCRYPTION_KEY=<64-char-hex>
 SIGNAL_API_URL=http://localhost:8080
 SIGNAL_SENDER_NUMBER=+1234567890
 ```
 
-### 3. Start infrastructure
+> Note: Postgres is mapped to port **5433** to avoid conflicts with any local Postgres instance.
+
+### 3. Set up the database
 
 ```bash
-npm run docker:up
-```
-
-Starts: **PostgreSQL 16** (5432), **Redis 7** (6379), **Signal CLI** (8080).
-
-### 4. Set up the database
-
-```bash
+npm install
 npm run db:push     # push schema
 npm run db:seed     # optional: seed test data
 ```
 
-### 5. Run the app
-
-Two processes are required in separate terminals:
+### 4. Run the app
 
 ```bash
-# Terminal 1 — web server
+# Terminal 1 — web server (hot reload)
 npm run dev
 
 # Terminal 2 — background workers
@@ -110,19 +157,25 @@ Visit **http://localhost:3000**.
 ## Scripts
 
 ```bash
-npm run dev           # Next.js dev server
-npm run build         # Production build
-npm start             # Production server
-npm run worker        # BullMQ background workers
+# Docker
+npm run docker:build      # Build app + worker images
+npm run docker:up         # Start all containers (no rebuild)
+npm run docker:up:full    # Build images then start all containers
+npm run docker:down       # Stop all containers
+npm run docker:logs       # Tail app + worker logs
 
-npm run docker:up     # Start docker containers
-npm run docker:down   # Stop docker containers
+# Dev
+npm run dev               # Next.js dev server (hot reload)
+npm run worker            # BullMQ background workers
+npm run build             # Production build
+npm start                 # Production server
 
-npm run db:generate   # Generate Prisma client
-npm run db:push       # Push schema to DB
-npm run db:migrate    # Create migration
-npm run db:seed       # Seed test data
-npm run db:studio     # Open Prisma Studio GUI
+# Database
+npm run db:generate       # Generate Prisma client
+npm run db:push           # Push schema to DB
+npm run db:migrate        # Create migration
+npm run db:seed           # Seed test data
+npm run db:studio         # Open Prisma Studio GUI
 ```
 
 ---

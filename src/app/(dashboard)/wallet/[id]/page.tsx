@@ -2,9 +2,11 @@
 
 import { use, useState, useCallback, useEffect, useRef } from 'react';
 import { useWallet, useDeleteWallet } from '@/hooks/use-wallet';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NeonButton } from '@/components/ui/neon-button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { UtxoList } from '@/components/wallet/utxo-list';
+import { useSettings } from '@/hooks/use-settings';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -38,8 +40,19 @@ function RelativeTime({ date }: { date: Date }) {
 export default function WalletDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: wallet, isLoading, error } = useWallet(id);
+  const { settings } = useSettings();
   const deleteWallet = useDeleteWallet();
   const router = useRouter();
+
+  const { data: utxos } = useQuery({
+    queryKey: ['utxos', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/utxos?walletId=${id}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: settings.showUtxoList,
+  });
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
@@ -217,6 +230,7 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
         <div className="p-4 grid grid-cols-2 gap-4 text-sm">
           {[
             { label: 'NETWORK', value: wallet.network.toUpperCase(), color: 'text-neon-amber' },
+            { label: 'TYPE', value: 'P2TR — Taproot', color: 'text-neon-green' },
             { label: 'PATH', value: wallet.derivationPath, color: 'text-cyber-text' },
             { label: 'TRANSACTIONS', value: String((wallet as any)._count?.transactions ?? 0), color: 'text-cyber-text' },
             { label: 'NEXT_INDEX', value: String(wallet.nextReceiveIndex), color: 'text-cyber-text' },
@@ -228,6 +242,21 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
           ))}
         </div>
       </div>
+
+      {/* UTXO List — shown when enabled in Settings */}
+      {settings.showUtxoList && (
+        <div className="sv-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
+            <span className="text-[11px] font-mono text-neon-green uppercase tracking-[0.15em]">UTXO_SET</span>
+            <Link href="/settings" className="text-[10px] font-mono text-cyber-muted hover:text-cyber-text transition-colors">
+              settings →
+            </Link>
+          </div>
+          <div className="p-4">
+            <UtxoList utxos={utxos ?? []} />
+          </div>
+        </div>
+      )}
 
     </div>
   );

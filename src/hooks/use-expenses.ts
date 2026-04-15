@@ -61,17 +61,21 @@ export function useSubmitExpense() {
 export function useApproveExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ expenseId, action }: { expenseId: string; action: 'approve' | 'reject' }) => {
+    mutationFn: async ({ expenseId, action, walletId }: { expenseId: string; action: 'approve' | 'reject'; walletId?: string }) => {
       const res = await fetch(`/api/expenses/${expenseId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, walletId }),
       });
-      if (!res.ok) throw new Error('Action failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Action failed');
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
     },
   });
 }

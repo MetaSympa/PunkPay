@@ -200,6 +200,16 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
   });
   const dbUtxoMap = new Map(dbUtxos.map(u => [`${u.txid}:${u.vout}`, u]));
 
+  // Build a set of SPENT UTXO keys so the upsert loop never resurrects them.
+  // This guards against Mempool.space caching edge-cases where a spent UTXO
+  // briefly re-appears in the /utxo endpoint after a broadcast.
+  const spentUtxoKeys = new Set(
+    (await prisma.utxo.findMany({
+      where: { walletId, status: 'SPENT' },
+      select: { txid: true, vout: true },
+    })).map(u => `${u.txid}:${u.vout}`)
+  );
+
   // 3. Build set of all live UTXOs from scan
   const liveUtxoMap = new Map<string, { result: AddressScanResult; utxo: MempoolUtxo }>();
   for (const result of allResults) {
@@ -240,6 +250,9 @@ export async function syncWalletUtxos(walletId: string, network: string): Promis
   let newUtxos = 0;
   const upsertPromises = [];
   for (const [key, { result, utxo }] of liveUtxoMap) {
+    // Never resurrect a UTXO that the payment handler has already marked SPENT.
+    if (spentUtxoKeys.has(key)) continue;
+
     const scriptPubKey = addressToScriptPubKey(result.address, network);
     const isNew = !dbUtxoMap.has(key);
     if (isNew) newUtxos++;

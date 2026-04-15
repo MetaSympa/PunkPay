@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useExpenses, useApproveExpense, useSubmitExpense } from '@/hooks/use-expenses';
+import { useWallets } from '@/hooks/use-wallet';
 import { NeonButton } from '@/components/ui/neon-button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
@@ -17,7 +18,11 @@ const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
 
 function PayerExpenses() {
   const { data: expenses, isLoading } = useExpenses();
+  const { data: wallets } = useWallets();
   const approve = useApproveExpense();
+  const [payWallet, setPayWallet] = useState<Record<string, string>>({}); // expenseId → walletId
+
+  const hotWallets = wallets?.filter((w: any) => w.hasSeed) ?? [];
 
   if (isLoading) return <div className="flex h-64 items-center justify-center"><LoadingSpinner text="LOADING_CLAIMS" /></div>;
 
@@ -70,11 +75,31 @@ function PayerExpenses() {
                     {exp.recipientAddress}
                   </p>
                 )}
+                {/* Wallet selector for auto-pay */}
+                {hotWallets.length > 0 && (
+                  <div>
+                    <label className="block text-[10px] font-mono text-cyber-muted uppercase tracking-wider mb-1">
+                      PAY_FROM (auto-broadcast)
+                    </label>
+                    <select
+                      value={payWallet[exp.id] ?? ''}
+                      onChange={e => setPayWallet(w => ({ ...w, [exp.id]: e.target.value }))}
+                      className="w-full bg-cyber-bg border border-cyber-border rounded px-2 py-1.5 text-neon-green font-mono text-xs focus:border-neon-amber focus:outline-none"
+                    >
+                      <option value="">— Approve only (no auto-pay) —</option>
+                      {hotWallets.map((w: any) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name.replace(/\s/g, '_')} · {Number(w.balance).toLocaleString()} SATS
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <NeonButton variant="primary" size="sm"
                     loading={approve.isPending}
-                    onClick={() => approve.mutate({ expenseId: exp.id, action: 'approve' })}>
-                    APPROVE
+                    onClick={() => approve.mutate({ expenseId: exp.id, action: 'approve', walletId: payWallet[exp.id] || undefined })}>
+                    {payWallet[exp.id] ? 'APPROVE & PAY' : 'APPROVE'}
                   </NeonButton>
                   <NeonButton variant="red" size="sm"
                     loading={approve.isPending}
