@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-// Bitcoin address validation — supports P2TR (bc1p) and P2WPKH (bc1q) for mainnet, testnet, regtest
-const btcAddressRegex = /^(bc1[pq]|tb1[pq]|bcrt1[pq])[a-z0-9]{38,64}$/;
+// Bitcoin address validation — supports P2TR (bc1p) and P2WPKH (bc1q) for mainnet, testnet, signet, regtest
+export const btcAddressRegex = /^(bc1[pq]|tb1[pq]|bcrt1[pq])[a-z0-9]{38,64}$/;
 const xpubRegex = /^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,120}$/;
 
 export const loginSchema = z.object({
