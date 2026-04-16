@@ -2,8 +2,9 @@
 
 import { useSession } from 'next-auth/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import QRCode from 'qrcode';
 import { useWallets } from '@/hooks/use-wallet';
 import { useSchedules } from '@/hooks/use-schedules';
 import { useExpenses, useApproveExpense } from '@/hooks/use-expenses';
@@ -86,6 +87,113 @@ const TX_STATUS: Record<string, { label: string; color: string }> = {
 const EXP_COLOR: Record<string, string> = {
   PENDING: 'text-neon-amber', APPROVED: 'text-neon-green', REJECTED: 'text-neon-red', PAID: 'text-cyber-muted',
 };
+
+/* ── Receive Modal ────────────────────────────────────────────────────── */
+
+function ReceiveModal({ wallets, onClose }: { wallets: any[]; onClose: () => void }) {
+  const [selectedId, setSelectedId] = useState(wallets.length === 1 ? wallets[0].id : '');
+  const [address, setAddress] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    setLoading(true);
+    setAddress(null);
+    setQrDataUrl(null);
+    fetch(`/api/wallet/${selectedId}`)
+      .then(r => r.json())
+      .then(async (data) => {
+        if (cancelled) return;
+        const addr: string | undefined = data.receiveAddress?.address;
+        if (addr) {
+          setAddress(addr);
+          const url = await QRCode.toDataURL(`bitcoin:${addr}`, {
+            width: 200, margin: 2,
+            color: { dark: '#00FF41', light: '#0d0d0d' },
+          });
+          if (!cancelled) setQrDataUrl(url);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedId]);
+
+  const handleCopy = () => {
+    if (!address) return;
+    navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-sm sv-card">
+        <div className="px-5 py-4 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
+          <span className="text-[11px] font-mono text-neon-green uppercase tracking-[0.15em]">↓ Receive Bitcoin</span>
+          <button onClick={onClose} className="text-cyber-muted hover:text-cyber-text font-mono text-lg leading-none">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          {wallets.length > 1 && (
+            <div>
+              <label className="sv-label">Select Wallet</label>
+              <select
+                value={selectedId}
+                onChange={e => setSelectedId(e.target.value)}
+                className="sv-input mt-1"
+              >
+                <option value="">-- select wallet --</option>
+                {wallets.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner text="DERIVING_ADDRESS" />
+            </div>
+          )}
+
+          {!loading && address && qrDataUrl && (
+            <>
+              <div className="flex justify-center p-4 bg-black border border-cyber-border/50 rounded">
+                <img src={qrDataUrl} alt="Receive address QR" className="w-48 h-48 rounded" />
+              </div>
+              <div>
+                <p className="sv-stat-label mb-1">Receive Address</p>
+                <div className="flex items-start gap-2 bg-black/40 border border-cyber-border rounded px-3 py-2">
+                  <p className="text-[11px] font-mono text-neon-green break-all flex-1 leading-relaxed">{address}</p>
+                  <button
+                    onClick={handleCopy}
+                    className="text-[10px] font-mono text-cyber-muted hover:text-neon-green transition-colors shrink-0 mt-0.5"
+                  >
+                    {copied ? '✓ COPIED' : 'COPY'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {!loading && wallets.length > 1 && !selectedId && (
+            <p className="text-xs font-mono text-cyber-muted text-center py-4">Select a wallet to show its receive address</p>
+          )}
+
+          {!loading && selectedId && !address && !loading && (
+            <p className="text-xs font-mono text-neon-amber text-center py-4">No receive address available — try syncing the wallet</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Quick Transfer Modal ─────────────────────────────────────────────── */
 
@@ -208,6 +316,7 @@ function PayerDashboard() {
   const { data: recipients } = useRecipients();
   const approveExpense = useApproveExpense();
   const [showQuickTransfer, setShowQuickTransfer] = useState(false);
+  const [showReceive, setShowReceive] = useState(false);
 
   const firstWalletId = wallets?.[0]?.id ?? null;
   const { isSyncing, syncNow } = useWalletSync(firstWalletId);
@@ -243,9 +352,7 @@ function PayerDashboard() {
           </div>
           <div className="flex gap-3 mt-6">
             <NeonButton variant="primary" size="md" onClick={() => setShowQuickTransfer(true)}>⚡ Quick Transfer</NeonButton>
-            <Link href="/wallet">
-              <NeonButton variant="ghost" size="md">Receive</NeonButton>
-            </Link>
+            <NeonButton variant="ghost" size="md" onClick={() => setShowReceive(true)}>Receive</NeonButton>
           </div>
           {/* Sync indicator */}
           <div className="absolute top-6 right-6">
@@ -392,6 +499,9 @@ function PayerDashboard() {
 
       {showQuickTransfer && (
         <QuickTransferModal wallets={wallets ?? []} onClose={() => setShowQuickTransfer(false)} />
+      )}
+      {showReceive && (
+        <ReceiveModal wallets={wallets ?? []} onClose={() => setShowReceive(false)} />
       )}
     </div>
   );

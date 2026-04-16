@@ -11,7 +11,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   DRAFT:     { label: 'DRAFT',     color: 'text-cyber-muted',  bg: 'bg-cyber-muted/10 border-cyber-border' },
   SIGNED:    { label: 'SIGNED',    color: 'text-neon-blue',    bg: 'bg-neon-blue/10 border-neon-blue/30' },
-  BROADCAST: { label: 'BROADCAST', color: 'text-neon-amber',   bg: 'bg-neon-amber/10 border-neon-amber/30' },
+  BROADCAST: { label: 'BROADCASTED', color: 'text-neon-green',   bg: 'bg-neon-green/10 border-neon-green/30' },
   CONFIRMED: { label: 'CONFIRMED', color: 'text-neon-green',   bg: 'bg-neon-green/10 border-neon-green/30' },
   FAILED:    { label: 'FAILED',    color: 'text-neon-red',     bg: 'bg-neon-red/10 border-neon-red/30' },
   REPLACED:  { label: 'REPLACED',  color: 'text-neon-purple',  bg: 'bg-neon-purple/10 border-neon-purple/30' },
@@ -184,7 +184,7 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
             {tx.txid && (
               <div className="col-span-2">
                 <p className="sv-stat-label">TXID</p>
-                <a href={`https://mempool.space/tx/${tx.txid}`} target="_blank" rel="noopener noreferrer"
+                <a href={`https://mutinynet.com/tx/${tx.txid}`} target="_blank" rel="noopener noreferrer"
                   className="text-xs font-mono text-neon-green hover:underline break-all mt-0.5 inline-block">{tx.txid}</a>
               </div>
             )}
@@ -210,9 +210,9 @@ function TxRow({ tx, expanded, onToggle, onSign, onDelete, deletingId }: {
           )}
 
           {tx.txid && (tx.status === 'BROADCAST' || tx.status === 'CONFIRMED') && (
-            <a href={`https://mempool.space/tx/${tx.txid}`} target="_blank" rel="noopener noreferrer"
+            <a href={`https://mutinynet.com/tx/${tx.txid}`} target="_blank" rel="noopener noreferrer"
               className="inline-block text-xs font-mono text-neon-green border border-neon-green/30 rounded px-3 py-1.5 hover:bg-neon-green/10 transition-colors tracking-wider">
-              VIEW ON MEMPOOL ↗
+              VIEW ON MUTINYNET ↗
             </a>
           )}
         </div>

@@ -1,8 +1,7 @@
 import { Job, UnrecoverableError } from 'bullmq';
 import { paymentQueue } from '../scheduler/queues';
 import { prisma } from '../db';
-import { fetchUtxos, fetchTransactionStatus, broadcastTransaction, selectUtxos, fetchFeeEstimates } from '../bitcoin/utxo';
-import { getMempoolApiUrl } from '../bitcoin/networks';
+import { fetchTransactionStatus, selectUtxos, fetchFeeEstimates } from '../bitcoin/utxo';
 import * as bitcoin from 'bitcoinjs-lib';
 import { buildPsbt, calculateFee, extractRawTx, serializePsbt } from '../bitcoin/transaction';
 import { deriveAddress, type AddressType } from '../bitcoin/hd-wallet';
@@ -63,6 +62,12 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   await prisma.utxo.updateMany({
     where: { walletId, isLocked: true, lockedUntil: { lt: new Date() } },
     data: { isLocked: false, lockedUntil: null },
+  });
+
+  // Fetch schedule config (need rbfEnabled)
+  const scheduleConfig = await prisma.paymentSchedule.findUniqueOrThrow({
+    where: { id: scheduleId },
+    select: { rbfEnabled: true, cronExpression: true, timezone: true },
   });
 
   // Get wallet first so we have network for all bitcoin calls
@@ -144,9 +149,9 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   const changeAddr = deriveAddress(decryptedXpub, 1, wallet.nextChangeIndex, wallet.network, addrType);
 
   // Calculate actual fee
-  const actualFee = calculateFee(selected.length, 2, feeRate);
+  let actualFee = calculateFee(selected.length, 2, feeRate);
   const totalInput = selected.reduce((sum, u) => sum + u.valueSats, 0n);
-  const change = totalInput - amount - actualFee;
+  let change = totalInput - amount - actualFee;
 
   // Build PSBT
   const inputs = selected.map(u => {
@@ -159,13 +164,13 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     return base;
   });
 
-  const outputs = [
+  let outputs = [
     { address: recipientAddress, valueSats: amount },
     ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
   ];
 
-  const psbt = buildPsbt(inputs, outputs, wallet.network);
-  const psbtBase64 = serializePsbt(psbt);
+  // Initial PSBT (used for DRAFT fallback when wallet has no seed)
+  let psbtBase64 = serializePsbt(buildPsbt(inputs, outputs, wallet.network, scheduleConfig.rbfEnabled));
 
   // Auto-sign and broadcast if wallet has seed stored
   let txStatus: 'DRAFT' | 'BROADCAST' = 'DRAFT';
@@ -177,7 +182,22 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       const d = utxoData.find(u => u.txid === s.txid && u.vout === s.vout)!;
       return { chain: d.chain, index: d.index };
     });
-    const rawHex = await signPsbt(psbtBase64, mnemonic, inputPaths, addrType, wallet.network);
+
+    let rawHex = await signPsbt(serializePsbt(buildPsbt(inputs, outputs, wallet.network, scheduleConfig.rbfEnabled)), mnemonic, inputPaths, addrType, wallet.network);
+
+    // Verify fee against actual vsize — estimate can be off by 1-2 vbytes.
+    // If underpaying, rebuild with the exact fee and resign (one pass is enough).
+    const realFee = BigInt(Math.ceil(bitcoin.Transaction.fromHex(rawHex).virtualSize() * feeRate));
+    if (realFee > actualFee) {
+      actualFee = realFee;
+      change = totalInput - amount - actualFee;
+      outputs = [
+        { address: recipientAddress, valueSats: amount },
+        ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
+      ];
+      psbtBase64 = serializePsbt(buildPsbt(inputs, outputs, wallet.network, scheduleConfig.rbfEnabled));
+      rawHex = await signPsbt(psbtBase64, mnemonic, inputPaths, addrType, wallet.network);
+    }
 
     try {
       broadcastedTxid = await broadcastTx(rawHex, wallet.network);
@@ -209,7 +229,8 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     // without waiting for the async UTXO sync to catch up from the mempool.
     if (change > 330n) {
       const net = getNetwork(wallet.network);
-      const changeScriptPubKey = bitcoin.address.toOutputScript(changeAddr.address, net).toString('hex');
+
+      const changeScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(changeAddr.address, net)).toString('hex');
       const changeAddrRecord = await prisma.address.upsert({
         where: { address: changeAddr.address },
         update: {},
@@ -241,7 +262,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       feeRate,
       recipientAddress,
       psbt: txStatus === 'DRAFT' ? psbtBase64 : null,
-      rbfEnabled: true,
+      rbfEnabled: scheduleConfig.rbfEnabled,
       scheduleId,
       broadcastAt: txStatus === 'BROADCAST' ? new Date() : undefined,
     },
@@ -255,21 +276,18 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
 
   // Update schedule timing — compute interval so each schedule keeps its own independent cadence
   const { parseExpression } = await import('cron-parser');
-  const sched = await prisma.paymentSchedule.findUnique({ where: { id: scheduleId } });
-  if (sched) {
-    let nextRunAt: Date | null = null;
-    try {
-      const expr = parseExpression(sched.cronExpression, { tz: sched.timezone });
-      const first = expr.next().toDate();
-      const second = expr.next().toDate();
-      const intervalMs = second.getTime() - first.getTime();
-      nextRunAt = new Date(Date.now() + intervalMs);
-    } catch {}
-    await prisma.paymentSchedule.update({
-      where: { id: scheduleId },
-      data: { lastRunAt: new Date(), lastError: null, ...(nextRunAt && { nextRunAt }) },
-    });
-  }
+  let nextRunAt: Date | null = null;
+  try {
+    const expr = parseExpression(scheduleConfig.cronExpression, { tz: scheduleConfig.timezone });
+    const first = expr.next().toDate();
+    const second = expr.next().toDate();
+    const intervalMs = second.getTime() - first.getTime();
+    nextRunAt = new Date(Date.now() + intervalMs);
+  } catch {}
+  await prisma.paymentSchedule.update({
+    where: { id: scheduleId },
+    data: { lastRunAt: new Date(), lastError: null, ...(nextRunAt && { nextRunAt }) },
+  });
 
   job.log(`Scheduled payment ${txStatus} — ${amount} sats to ${recipientAddress}${broadcastedTxid ? ` txid: ${broadcastedTxid}` : ''}`);
   } catch (err: any) {

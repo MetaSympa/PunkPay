@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
+    "@next/swc-darwin-arm64": "^16.2.4",
     "@prisma/client": "^6.19.2",
     "@tanstack/react-query": "^5.90.21",
     "@types/ws": "^8.18.1",
