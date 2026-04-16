@@ -57,7 +57,6 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [unlocking, setUnlocking] = useState(false);
   const [refreshingAddr, setRefreshingAddr] = useState(false);
   const [overrideAddr, setOverrideAddr] = useState<{ address: string; index: number } | null>(null);
   const autoSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -96,17 +95,6 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
     autoSyncRef.current = setInterval(() => handleSync(true), 45_000);
     return () => { if (autoSyncRef.current) clearInterval(autoSyncRef.current); };
   }, [handleSync]);
-
-  async function handleUnlock() {
-    setUnlocking(true);
-    try {
-      const res = await fetch(`/api/wallet/${id}/unlock`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Unlock failed');
-      setSyncResult(`[SUCCESS] UNLOCKED ${data.unlocked} UTXOS`);
-      queryClient.invalidateQueries({ queryKey: ['wallet', id] });
-    } catch (err: any) { setSyncResult(`[ERROR] ${err.message}`); } finally { setUnlocking(false); }
-  }
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><LoadingSpinner text="LOADING_NODE" /></div>;
 
@@ -172,7 +160,6 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
         <NeonButton variant="primary" size="sm" onClick={() => handleSync(false)} loading={syncing}>↺ SYNC</NeonButton>
-        <NeonButton variant="amber" size="sm" onClick={handleUnlock} loading={unlocking}>🔓 UNLOCK</NeonButton>
         <NeonButton variant="red" size="sm" onClick={handleDelete} loading={deleteWallet.isPending}>DELETE</NeonButton>
       </div>
 

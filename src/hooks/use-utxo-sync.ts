@@ -20,25 +20,8 @@ export function useSyncWallet(walletId: string | null) {
   });
 }
 
-export function useUnlockUtxos(walletId: string | null) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      if (!walletId) return null;
-      const res = await fetch(`/api/wallet/${walletId}/unlock`, { method: 'POST' });
-      if (!res.ok) return null;
-      return res.json();
-    },
-    onSuccess: () => {
-      if (!walletId) return;
-      qc.invalidateQueries({ queryKey: ['wallet', walletId] });
-    },
-  });
-}
-
 export function useAutoSync(walletId: string | null, intervalMs = 60_000) {
   const sync = useSyncWallet(walletId);
-  const unlock = useUnlockUtxos(walletId);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [lastResult, setLastResult] = useState<{ addressesChecked: number; utxosFound: number; totalSats: string } | null>(null);
 
@@ -50,7 +33,6 @@ export function useAutoSync(walletId: string | null, intervalMs = 60_000) {
         setLastResult(result);
         setLastSyncedAt(new Date());
       }
-      await unlock.mutateAsync();
     } catch {
       // ignore
     }
@@ -67,7 +49,6 @@ export function useAutoSync(walletId: string | null, intervalMs = 60_000) {
   return {
     syncNow: run,
     isSyncing: sync.isPending,
-    isUnlocking: unlock.isPending,
     lastSyncedAt,
     lastResult,
     syncError: sync.error,

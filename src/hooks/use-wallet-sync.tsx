@@ -62,9 +62,6 @@ export function WalletSyncProvider({ children }: { children: ReactNode }) {
         throw new Error(err.error || 'Sync failed');
       }
 
-      // Unlock expired UTXOs
-      await fetch(`/api/wallet/${walletId}/unlock`, { method: 'POST' }).catch(() => {});
-
       lastSyncTime.current[walletId] = Date.now();
       updateSyncState(walletId, { isSyncing: false, lastSyncedAt: new Date(), lastError: null });
 
