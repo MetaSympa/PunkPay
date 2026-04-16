@@ -126,17 +126,19 @@ model Utxo {
   vout        Int
   valueSats   BigInt
   status      UtxoStatus @default(UNCONFIRMED)
-  isLocked    Boolean    @default(false)
-  lockedUntil DateTime?
+  isLocked     Boolean    @default(false)
+  lockedUntil  DateTime?
+  lockedByTxId String?    // internal Transaction id — DELETE route unlocks by this, not by time
   scriptPubKey String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   wallet      Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
   address     Address    @relation(fields: [addressId], references: [id], onDelete: Cascade)
 
   @@unique([txid, vout])
   @@index([walletId, status])
+  @@index([lockedByTxId])
   @@map("utxos")
 }
 

@@ -179,7 +179,7 @@ export async function buildAndBroadcastPayment({
     // Unlock on failure so UTXOs can be retried
     await prisma.utxo.updateMany({
       where: { id: { in: selectedIds } },
-      data: { isLocked: false, lockedUntil: null },
+      data: { isLocked: false, lockedUntil: null, lockedByTxId: null },
     });
     throw err;
   }

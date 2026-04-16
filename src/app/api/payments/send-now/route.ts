@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
@@ -41,8 +42,12 @@ export async function POST(req: NextRequest) {
     // Release any expired locks first
     await prisma.utxo.updateMany({
       where: { walletId: data.walletId, isLocked: true, lockedUntil: { lt: new Date() } },
-      data: { isLocked: false, lockedUntil: null },
+      data: { isLocked: false, lockedUntil: null, lockedByTxId: null },
     });
+
+    // Pre-generate the transaction ID so it can be stamped on UTXO locks before
+    // the transaction record is written — avoids a chicken-and-egg problem with FK constraints.
+    const txId = randomUUID();
 
     // Load wallet with UTXOs + their address info (needed for signing key derivation)
     const wallet = await prisma.wallet.findFirst({
@@ -96,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.utxo.updateMany({
       where: { id: { in: selectedIds } },
-      data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000) },
+      data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000), lockedByTxId: txId },
     });
 
     // Change address
@@ -147,6 +152,7 @@ export async function POST(req: NextRequest) {
 
     const tx = await prisma.transaction.create({
       data: {
+        id: txId,
         walletId: wallet.id,
         txid: broadcastedTxid ?? null,
         type: 'SEND',

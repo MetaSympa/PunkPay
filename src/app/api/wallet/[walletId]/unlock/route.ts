@@ -17,7 +17,7 @@ export async function POST(
 
   const { count } = await prisma.utxo.updateMany({
     where: { walletId, isLocked: true },
-    data: { isLocked: false, lockedUntil: null },
+    data: { isLocked: false, lockedUntil: null, lockedByTxId: null },
   });
 
   return NextResponse.json({ unlocked: count });

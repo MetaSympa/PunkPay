@@ -61,7 +61,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   // Release expired UTXO locks
   await prisma.utxo.updateMany({
     where: { walletId, isLocked: true, lockedUntil: { lt: new Date() } },
-    data: { isLocked: false, lockedUntil: null },
+    data: { isLocked: false, lockedUntil: null, lockedByTxId: null },
   });
 
   // Fetch schedule config (need rbfEnabled)
@@ -138,9 +138,14 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   const estimatedFee = calculateFee(1, 2, feeRate);
   const { selected } = selectUtxos(utxoData, amount, estimatedFee);
 
+  // Compute once — reused for locking, spending, and lockedByTxId tagging below.
+  const lockedUtxoIds = wallet.utxos
+    .filter(u => selected.some(s => s.txid === u.txid && s.vout === u.vout))
+    .map(u => u.id);
+
   // Lock selected UTXOs
   await prisma.utxo.updateMany({
-    where: { id: { in: wallet.utxos.filter(u => selected.some(s => s.txid === u.txid && s.vout === u.vout)).map(u => u.id) } },
+    where: { id: { in: lockedUtxoIds } },
     data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000) },
   });
 
@@ -232,12 +237,9 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     }
 
     // Mark UTXOs as spent
-    const selectedIds = wallet.utxos
-      .filter(u => selected.some(s => s.txid === u.txid && s.vout === u.vout))
-      .map(u => u.id);
     await prisma.utxo.updateMany({
-      where: { id: { in: selectedIds } },
-      data: { status: 'SPENT', isLocked: false },
+      where: { id: { in: lockedUtxoIds } },
+      data: { status: 'SPENT', isLocked: false, lockedByTxId: null },
     });
 
     // Immediately register the change UTXO so the next scheduled run can spend it
@@ -266,7 +268,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   }
 
   // Create transaction record
-  await prisma.transaction.create({
+  const txRecord = await prisma.transaction.create({
     data: {
       walletId,
       txid: broadcastedTxid ?? null,
@@ -282,6 +284,15 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       broadcastAt: txStatus === 'BROADCAST' ? new Date() : undefined,
     },
   });
+
+  // For DRAFT transactions (wallet has no seed), UTXOs are still locked — tag them
+  // so the DELETE route can unlock precisely these UTXOs and not touch others.
+  if (txStatus === 'DRAFT') {
+    await prisma.utxo.updateMany({
+      where: { id: { in: lockedUtxoIds }, isLocked: true },
+      data: { lockedByTxId: txRecord.id },
+    });
+  }
 
   // Update schedule timing — compute interval so each schedule keeps its own independent cadence
   const { parseExpression } = await import('cron-parser');

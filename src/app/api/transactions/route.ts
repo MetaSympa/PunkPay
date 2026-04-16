@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { sendPaymentSchema } from '@/lib/validation';
@@ -65,6 +66,10 @@ export async function POST(req: NextRequest) {
 
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
+    // Pre-generate the transaction ID so it can be stamped on UTXO locks before
+    // the transaction record is written — avoids a chicken-and-egg problem with FK constraints.
+    const txId = randomUUID();
+
     // Atomically SELECT and lock UTXOs — prevents double-lock under concurrent requests.
     // FOR UPDATE SKIP LOCKED acquires row locks during the read; a concurrent tx that
     // already holds locks on the same rows will simply not see them, ensuring each
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
 
       await tx.utxo.updateMany({
         where: { id: { in: selectedIds } },
-        data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000) },
+        data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000), lockedByTxId: txId },
       });
 
       return { selected, totalSats, utxoData: available };
@@ -119,6 +124,7 @@ export async function POST(req: NextRequest) {
 
     const tx = await prisma.transaction.create({
       data: {
+        id: txId,
         walletId: data.walletId,
         type: 'SEND',
         status: 'DRAFT',
