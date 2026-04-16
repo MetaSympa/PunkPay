@@ -98,15 +98,18 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   // Resolve recipient address: derive fresh Taproot address from xpub, or use static address
   let recipientAddress: string;
   if (job.data.recipientXpub) {
-    const schedule = await prisma.paymentSchedule.findUniqueOrThrow({ where: { id: scheduleId } });
-    const derived = deriveAddress(job.data.recipientXpub, 0, schedule.recipientXpubIndex, wallet.network);
+    // Atomically claim the next recipient xpub index — same pattern as nextChangeIndex.
+    // PostgreSQL serializes concurrent UPDATEs on the same row, so two jobs racing
+    // here each get a distinct index and derive a distinct recipient address.
+    const [{ xpub_index }] = await prisma.$queryRaw<[{ xpub_index: number }]>`
+      UPDATE "payment_schedules"
+      SET "recipientXpubIndex" = "recipientXpubIndex" + 1
+      WHERE id = ${scheduleId}
+      RETURNING "recipientXpubIndex" - 1 AS xpub_index
+    `;
+    const derived = deriveAddress(job.data.recipientXpub, 0, xpub_index, wallet.network);
     recipientAddress = derived.address;
-    // Increment index so next payment uses a fresh address
-    await prisma.paymentSchedule.update({
-      where: { id: scheduleId },
-      data: { recipientXpubIndex: { increment: 1 } },
-    });
-    job.log(`Derived recipient address index ${schedule.recipientXpubIndex}: ${recipientAddress}`);
+    job.log(`Derived recipient address index ${xpub_index}: ${recipientAddress}`);
   } else if (job.data.recipientAddress) {
     recipientAddress = job.data.recipientAddress;
   } else {
