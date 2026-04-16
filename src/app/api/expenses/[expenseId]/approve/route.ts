@@ -57,7 +57,7 @@ export async function POST(
     if (!wallet.hasSeed) return NextResponse.json({ error: 'Selected wallet has no seed — cannot auto-sign' }, { status: 422 });
 
     try {
-      const { txid, feeSats } = await buildAndBroadcastPayment({
+      const { txid, feeSats, feeRate: actualFeeRate } = await buildAndBroadcastPayment({
         walletId,
         recipientAddress: expense.recipientAddress,
         amountSats: expense.amount,
@@ -84,7 +84,7 @@ export async function POST(
           status: 'BROADCAST',
           amountSats: expense.amount,
           feeSats,
-          feeRate: 0,
+          feeRate: actualFeeRate,
           recipientAddress: expense.recipientAddress,
           rbfEnabled: true,
           broadcastAt: new Date(),

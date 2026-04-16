@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Pre-derive first 5 change addresses
-    const changeAddresses = deriveAddresses(data.xpub, 1, 0, 5, data.network, addressType);
+    const changeAddresses = deriveAddresses(data.xpub, 1, 0, 5, data.network, 'P2TR');
     await prisma.address.createMany({
       data: changeAddresses.map(a => ({
         walletId: wallet.id,

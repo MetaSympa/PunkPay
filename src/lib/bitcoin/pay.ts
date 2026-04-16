@@ -90,7 +90,7 @@ export async function buildAndBroadcastPayment({
 
     const outputs = [
       { address: recipientAddress, valueSats: amountSats },
-      ...(change > 546n ? [{ address: changeAddr.address, valueSats: change }] : []),
+      ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
     ];
 
     const psbt = buildPsbt(inputs, outputs, wallet.network);
@@ -110,7 +110,7 @@ export async function buildAndBroadcastPayment({
       data: { status: 'SPENT', isLocked: false },
     });
 
-    if (change > 546n) {
+    if (change > 330n) {
       await prisma.address.upsert({
         where: { address: changeAddr.address },
         update: {},

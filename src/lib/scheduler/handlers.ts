@@ -3,8 +3,10 @@ import { paymentQueue } from '../scheduler/queues';
 import { prisma } from '../db';
 import { fetchUtxos, fetchTransactionStatus, broadcastTransaction, selectUtxos, fetchFeeEstimates } from '../bitcoin/utxo';
 import { getMempoolApiUrl } from '../bitcoin/networks';
+import * as bitcoin from 'bitcoinjs-lib';
 import { buildPsbt, calculateFee, extractRawTx, serializePsbt } from '../bitcoin/transaction';
 import { deriveAddress, type AddressType } from '../bitcoin/hd-wallet';
+import { getNetwork } from '../bitcoin/networks';
 import { syncWalletUtxos } from '../bitcoin/sync';
 import { decrypt } from '../crypto/encryption';
 import { signPsbt, broadcastTx } from '../bitcoin/signing';
@@ -56,17 +58,6 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
   const { scheduleId, walletId, amountSats, maxFeeRate } = job.data;
   const amount = BigInt(amountSats);
   try {
-
-  // Skip this run if a broadcast-pending tx already exists for the schedule.
-  // This prevents double-spend retries that would trigger RBF rejection.
-  const pendingBroadcast = await prisma.transaction.findFirst({
-    where: { scheduleId, status: 'BROADCAST' },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (pendingBroadcast) {
-    job.log(`[scheduler] Skipping: pending tx ${pendingBroadcast.txid} already in mempool for schedule ${scheduleId}`);
-    return;
-  }
 
   // Release expired UTXO locks
   await prisma.utxo.updateMany({
@@ -170,7 +161,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
 
   const outputs = [
     { address: recipientAddress, valueSats: amount },
-    ...(change > 546n ? [{ address: changeAddr.address, valueSats: change }] : []),
+    ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
   ];
 
   const psbt = buildPsbt(inputs, outputs, wallet.network);
@@ -213,6 +204,29 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       where: { id: { in: selectedIds } },
       data: { status: 'SPENT', isLocked: false },
     });
+
+    // Immediately register the change UTXO so the next scheduled run can spend it
+    // without waiting for the async UTXO sync to catch up from the mempool.
+    if (change > 330n) {
+      const net = getNetwork(wallet.network);
+      const changeScriptPubKey = bitcoin.address.toOutputScript(changeAddr.address, net).toString('hex');
+      const changeAddrRecord = await prisma.address.upsert({
+        where: { address: changeAddr.address },
+        update: {},
+        create: { walletId, address: changeAddr.address, index: wallet.nextChangeIndex, chain: 'INTERNAL' },
+      });
+      await prisma.utxo.create({
+        data: {
+          walletId,
+          addressId: changeAddrRecord.id,
+          txid: broadcastedTxid!,
+          vout: 1,
+          valueSats: change,
+          status: 'UNCONFIRMED',
+          scriptPubKey: changeScriptPubKey,
+        },
+      });
+    }
   }
 
   // Create transaction record
@@ -232,20 +246,6 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       broadcastAt: txStatus === 'BROADCAST' ? new Date() : undefined,
     },
   });
-
-  // Save the change address so future syncs can discover the change UTXO
-  if (change > 546n) {
-    await prisma.address.upsert({
-      where: { address: changeAddr.address },
-      update: {},
-      create: {
-        walletId,
-        address: changeAddr.address,
-        index: wallet.nextChangeIndex,
-        chain: 'INTERNAL',
-      },
-    });
-  }
 
   // Update wallet change index
   await prisma.wallet.update({
@@ -267,7 +267,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     } catch {}
     await prisma.paymentSchedule.update({
       where: { id: scheduleId },
-      data: { lastRunAt: new Date(), ...(nextRunAt && { nextRunAt }) },
+      data: { lastRunAt: new Date(), lastError: null, ...(nextRunAt && { nextRunAt }) },
     });
   }
 
@@ -285,7 +285,11 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       msg.includes('No spendable UTXOs') ||
       msg.includes('Insufficient funds');  // wallet may receive more funds later
     if (isTransient) {
-      // Rethrow as a plain Error so BullMQ retries per the queue's backoff config
+      // Surface the error in the UI without deactivating the schedule
+      await prisma.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: { lastError: `[RETRYING] ${msg}` },
+      }).catch(() => {});
       throw new Error(msg);
     }
     // Permanent failures (bad config, decryption error, missing recipient) stop the schedule
