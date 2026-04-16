@@ -144,9 +144,17 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000) },
   });
 
-  // Derive change address
   const decryptedXpub = decrypt(wallet.encryptedXpub);
-  const changeAddr = deriveAddress(decryptedXpub, 1, wallet.nextChangeIndex, wallet.network, addrType);
+  // Atomically claim the next change index — PostgreSQL serializes concurrent UPDATEs
+  // on the same row, so two payments racing here each get a distinct index and derive
+  // a distinct change address. Any gap left by a failed payment is harmless.
+  const [{ change_index }] = await prisma.$queryRaw<[{ change_index: number }]>`
+    UPDATE "wallets"
+    SET "nextChangeIndex" = "nextChangeIndex" + 1
+    WHERE id = ${walletId}
+    RETURNING "nextChangeIndex" - 1 AS change_index
+  `;
+  const changeAddr = deriveAddress(decryptedXpub, 1, change_index, wallet.network, addrType);
 
   // Calculate actual fee
   let actualFee = calculateFee(selected.length, 2, feeRate);
@@ -234,7 +242,7 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       const changeAddrRecord = await prisma.address.upsert({
         where: { address: changeAddr.address },
         update: {},
-        create: { walletId, address: changeAddr.address, index: wallet.nextChangeIndex, chain: 'INTERNAL' },
+        create: { walletId, address: changeAddr.address, index: change_index, chain: 'INTERNAL' },
       });
       await prisma.utxo.create({
         data: {
@@ -266,12 +274,6 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       scheduleId,
       broadcastAt: txStatus === 'BROADCAST' ? new Date() : undefined,
     },
-  });
-
-  // Update wallet change index
-  await prisma.wallet.update({
-    where: { id: walletId },
-    data: { nextChangeIndex: { increment: 1 } },
   });
 
   // Update schedule timing — compute interval so each schedule keeps its own independent cadence

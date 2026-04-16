@@ -101,7 +101,16 @@ export async function buildAndBroadcastPayment({
   });
 
   try {
-    const changeAddr = deriveAddress(decryptedXpub, 1, wallet.nextChangeIndex, wallet.network, addrType);
+    // Atomically claim the next change index — PostgreSQL serializes concurrent UPDATEs
+    // on the same row, so two payments racing here each get a distinct index and derive
+    // a distinct change address. Any gap left by a failed payment is harmless.
+    const [{ change_index }] = await prisma.$queryRaw<[{ change_index: number }]>`
+      UPDATE "wallets"
+      SET "nextChangeIndex" = "nextChangeIndex" + 1
+      WHERE id = ${walletId}
+      RETURNING "nextChangeIndex" - 1 AS change_index
+    `;
+    const changeAddr = deriveAddress(decryptedXpub, 1, change_index, wallet.network, addrType);
     let actualFee = calculateFee(selected.length, 2, feeRate);
     const totalInput = selected.reduce((sum, u) => sum + u.valueSats, 0n);
     let change = totalInput - amountSats - actualFee;
@@ -154,11 +163,7 @@ export async function buildAndBroadcastPayment({
       await prisma.address.upsert({
         where: { address: changeAddr.address },
         update: {},
-        create: { walletId, address: changeAddr.address, index: wallet.nextChangeIndex, chain: 'INTERNAL' },
-      });
-      await prisma.wallet.update({
-        where: { id: walletId },
-        data: { nextChangeIndex: { increment: 1 } },
+        create: { walletId, address: changeAddr.address, index: change_index, chain: 'INTERNAL' },
       });
     }
 
