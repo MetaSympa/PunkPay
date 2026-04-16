@@ -6,7 +6,7 @@ import { createAuditLog } from '@/skills/security/audit-log';
 import { applyRateLimit, AUTH_RATE_LIMIT } from '@/lib/api-utils';
 
 export async function POST(req: NextRequest) {
-  const rateLimited = applyRateLimit(req, 'register', AUTH_RATE_LIMIT);
+  const rateLimited = await applyRateLimit(req, 'register', AUTH_RATE_LIMIT);
   if (rateLimited) return rateLimited;
 
   try {

@@ -23,9 +23,6 @@ const sendNowSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const rateLimited = applyRateLimit(req, 'send-now', PAYMENT_RATE_LIMIT);
-  if (rateLimited) return rateLimited;
-
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!['PAYER', 'RECIPIENT', 'ADMIN'].includes((session.user as any).role)) {
@@ -33,6 +30,9 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = (session.user as any).id;
+
+  const rateLimited = await applyRateLimit(req, 'send-now', PAYMENT_RATE_LIMIT, userId);
+  if (rateLimited) return rateLimited;
 
   try {
     const body = await req.json();

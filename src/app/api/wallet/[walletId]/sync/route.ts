@@ -8,14 +8,14 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ walletId: string }> }
 ) {
-  const rateLimited = applyRateLimit(req, 'wallet-sync', SYNC_RATE_LIMIT);
-  if (rateLimited) return rateLimited;
-
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { walletId } = await params;
   const userId = (session.user as any).id;
+
+  const rateLimited = await applyRateLimit(req, 'wallet-sync', SYNC_RATE_LIMIT, userId);
+  if (rateLimited) return rateLimited;
 
   const wallet = await prisma.wallet.findFirst({
     where: { id: walletId, userId },

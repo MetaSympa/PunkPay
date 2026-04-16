@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/skills/security/audit-log';
 import { buildAndBroadcastPayment } from '@/lib/bitcoin/pay';
+import { applyRateLimit, APPROVE_RATE_LIMIT } from '@/lib/api-utils';
 
 export async function POST(
   req: NextRequest,
@@ -15,6 +16,9 @@ export async function POST(
   if (role !== 'PAYER' && role !== 'ADMIN') {
     return NextResponse.json({ error: 'Only payers can approve expenses' }, { status: 403 });
   }
+
+  const rateLimited = await applyRateLimit(req, 'approve-expense', APPROVE_RATE_LIMIT, (session.user as any).id);
+  if (rateLimited) return rateLimited;
 
   const { expenseId } = await params;
   const body = await req.json();

@@ -4,7 +4,7 @@ import { generateMnemonic } from '@/lib/bitcoin/seed-wallet';
 import { applyRateLimit } from '@/lib/api-utils';
 
 export async function GET(req: NextRequest) {
-  const rateLimited = applyRateLimit(req, 'gen-mnemonic', { windowMs: 60_000, maxRequests: 5 });
+  const rateLimited = await applyRateLimit(req, 'gen-mnemonic', { windowMs: 60_000, maxRequests: 5 });
   if (rateLimited) return rateLimited;
 
   const session = await auth();
