@@ -6,10 +6,10 @@ import { deriveAddress, type AddressType } from '@/lib/bitcoin/hd-wallet';
 import { selectUtxos, calculateFee, buildPsbt, serializePsbt } from '@/lib/bitcoin';
 import { signPsbt, broadcastTx } from '@/lib/bitcoin/signing';
 import { z } from 'zod';
-import { btcAddressRegex } from '@/lib/validation';
+import { btcAddressSchema } from '@/lib/validation';
 
 const sendSchema = z.object({
-  toAddress: z.string().regex(btcAddressRegex, 'Invalid Bitcoin address'),
+  toAddress: btcAddressSchema,
   amountSats: z.coerce.bigint().positive(),
   walletId: z.string().cuid(),
   feeRate: z.coerce.number().int().min(1).max(1000).default(5),
