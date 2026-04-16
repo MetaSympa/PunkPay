@@ -223,11 +223,14 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       broadcastedTxid = await broadcastTx(rawHex, wallet.network);
       txStatus = 'BROADCAST';
     } catch (broadcastErr: any) {
-      const errMsg: string = broadcastErr.message ?? String(broadcastErr);
-      const rbfTxid = extractRbfTxid(errMsg);
+      // Do NOT bind the raw error message to a named variable — mempool API responses
+      // can contain fee rates, internal txids, and full error bodies. Inlining keeps
+      // it out of scope so it cannot be accidentally logged to BullMQ's job log.
+      const rbfTxid = extractRbfTxid(broadcastErr.message ?? String(broadcastErr));
       if (rbfTxid) {
         // TX already in mempool (retry hit an existing unconfirmed tx with same inputs).
         // Treat the original broadcast as the canonical one — record it and move on.
+        // Log only the sanitized txid, never the raw API response.
         job.log(`[scheduler] RBF rejection: tx ${rbfTxid} already in mempool. Adopting it.`);
         broadcastedTxid = rbfTxid;
         txStatus = 'BROADCAST';
