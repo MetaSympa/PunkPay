@@ -61,30 +61,39 @@ export async function POST(req: NextRequest) {
 
     const wallet = await prisma.wallet.findFirst({
       where: { id: data.walletId, userId: (session.user as any).id },
-      include: { utxos: { where: { status: 'CONFIRMED', isLocked: false } } },
     });
 
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-    // Select UTXOs
-    const utxoData = wallet.utxos.map(u => ({
-      txid: u.txid,
-      vout: u.vout,
-      valueSats: u.valueSats,
-      scriptPubKey: u.scriptPubKey,
-    }));
+    // Atomically SELECT and lock UTXOs — prevents double-lock under concurrent requests.
+    // FOR UPDATE SKIP LOCKED acquires row locks during the read; a concurrent tx that
+    // already holds locks on the same rows will simply not see them, ensuring each
+    // request gets a disjoint UTXO set.
+    const { selected, totalSats, utxoData } = await prisma.$transaction(async (tx) => {
+      const available = await tx.$queryRaw<Array<{
+        id: string; txid: string; vout: number; valueSats: bigint; scriptPubKey: string;
+      }>>`
+        SELECT id, txid, vout, "valueSats", "scriptPubKey"
+        FROM "utxos"
+        WHERE "walletId" = ${wallet.id}
+          AND status = 'CONFIRMED'::"UtxoStatus"
+          AND "isLocked" = false
+        FOR UPDATE SKIP LOCKED
+      `;
 
-    const fee = calculateFee(2, 2, data.feeRate);
-    const { selected, totalSats } = selectUtxos(utxoData, data.amountSats, fee);
+      const fee = calculateFee(2, 2, data.feeRate);
+      const { selected, totalSats } = selectUtxos(available, data.amountSats, fee);
 
-    // Lock UTXOs
-    const selectedIds = wallet.utxos
-      .filter(u => selected.some(s => s.txid === u.txid && s.vout === u.vout))
-      .map(u => u.id);
+      const selectedIds = available
+        .filter(u => selected.some(s => s.txid === u.txid && s.vout === u.vout))
+        .map(u => u.id);
 
-    await prisma.utxo.updateMany({
-      where: { id: { in: selectedIds } },
-      data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000) },
+      await tx.utxo.updateMany({
+        where: { id: { in: selectedIds } },
+        data: { isLocked: true, lockedUntil: new Date(Date.now() + 30 * 60 * 1000) },
+      });
+
+      return { selected, totalSats, utxoData: available };
     });
 
     // Derive change address
