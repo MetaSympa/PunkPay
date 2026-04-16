@@ -88,6 +88,38 @@ const EXP_COLOR: Record<string, string> = {
   PENDING: 'text-neon-amber', APPROVED: 'text-neon-green', REJECTED: 'text-neon-red', PAID: 'text-cyber-muted',
 };
 
+/* ── No Wallet Modal ──────────────────────────────────────────────────── */
+
+function NoWalletModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm sv-card rounded-lg">
+        <div className="px-5 py-3 border-b border-cyber-border border-l-2 border-l-neon-amber flex items-center justify-between">
+          <span className="text-[11px] font-mono text-neon-amber uppercase tracking-[0.15em]">NO_WALLET_CONNECTED</span>
+          <button onClick={onClose} className="text-cyber-muted hover:text-cyber-text font-mono text-sm">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-sm font-mono text-cyber-text">You need a wallet before you can send, receive, or sync.</p>
+          <p className="text-[11px] font-mono text-cyber-muted leading-relaxed">
+            Create a new wallet or import an existing one with a seed phrase or xpub.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <NeonButton variant="ghost" size="sm" className="flex-1" onClick={onClose}>
+              CANCEL
+            </NeonButton>
+            <Link href="/wallet" className="flex-1">
+              <NeonButton variant="primary" size="sm" className="w-full" onClick={onClose}>
+                CREATE WALLET
+              </NeonButton>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Receive Modal ────────────────────────────────────────────────────── */
 
 function ReceiveModal({ wallets, onClose }: { wallets: any[]; onClose: () => void }) {
@@ -210,6 +242,16 @@ function QuickTransferModal({ wallets, onClose }: { wallets: any[]; onClose: () 
   const [error, setError] = useState('');
   const [txid, setTxid] = useState('');
 
+  const selectedWallet = hotWallets.find(w => w.id === form.walletId) ?? hotWallets[0];
+  const balanceSats = selectedWallet ? Number(selectedWallet.balance ?? 0) : 0;
+  // 1-in/1-out P2TR estimate: 10.5 + 58 + 43 = 111.5 vbytes
+  const estimatedFee = Math.ceil(111.5 * (parseInt(form.feeRate) || 1));
+  const maxSendable = Math.max(0, balanceSats - estimatedFee);
+
+  function fillMax() {
+    if (maxSendable > 330) setForm(f => ({ ...f, amountSats: String(maxSendable) }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSending(true); setError('');
@@ -240,9 +282,16 @@ function QuickTransferModal({ wallets, onClose }: { wallets: any[]; onClose: () 
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-full sm:max-w-md sv-card rounded-t-2xl sm:rounded-lg">
-        <div className="px-5 py-4 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
+        <div className="px-5 py-3 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
           <span className="text-[11px] font-mono text-neon-green uppercase tracking-[0.15em]">⚡ Quick Transfer</span>
-          <button onClick={onClose} className="text-cyber-muted hover:text-cyber-text font-mono">✕</button>
+          <div className="flex items-center gap-3">
+            {selectedWallet && (
+              <span className="text-[11px] font-mono text-cyber-muted">
+                BAL: <span className="text-neon-green font-semibold">{balanceSats.toLocaleString()}</span> SATS
+              </span>
+            )}
+            <button onClick={onClose} className="text-cyber-muted hover:text-cyber-text font-mono">✕</button>
+          </div>
         </div>
         <div className="p-5">
           {txid ? (
@@ -280,9 +329,20 @@ function QuickTransferModal({ wallets, onClose }: { wallets: any[]; onClose: () 
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="sv-label">Amount (sats)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="sv-label">Amount (sats)</label>
+                    <button type="button" onClick={fillMax}
+                      className="text-[10px] font-mono text-neon-green hover:text-neon-green/70 tracking-wider transition-colors">
+                      MAX
+                    </button>
+                  </div>
                   <input type="number" value={form.amountSats} onChange={e => setForm({ ...form, amountSats: e.target.value })}
-                    min="546" className="sv-input mt-1" required />
+                    min="330" className="sv-input mt-1" required />
+                  {balanceSats > 0 && form.amountSats && (
+                    <p className={`text-[10px] font-mono mt-1 ${parseInt(form.amountSats) + estimatedFee > balanceSats ? 'text-neon-red' : 'text-cyber-muted'}`}>
+                      ~{estimatedFee.toLocaleString()} sats fee · {(balanceSats - parseInt(form.amountSats || '0') - estimatedFee).toLocaleString()} remaining
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="sv-label">Fee (sat/vB)</label>
@@ -317,6 +377,12 @@ function PayerDashboard() {
   const approveExpense = useApproveExpense();
   const [showQuickTransfer, setShowQuickTransfer] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
+  const [showNoWallet, setShowNoWallet] = useState(false);
+
+  const hasWallet = (wallets?.length ?? 0) > 0;
+  function requireWallet(action: () => void) {
+    if (!hasWallet) { setShowNoWallet(true); } else { action(); }
+  }
 
   const firstWalletId = wallets?.[0]?.id ?? null;
   const { isSyncing, syncNow } = useWalletSync(firstWalletId);
@@ -351,12 +417,12 @@ function PayerDashboard() {
             </span>
           </div>
           <div className="flex gap-3 mt-6">
-            <NeonButton variant="primary" size="md" onClick={() => setShowQuickTransfer(true)}>⚡ Quick Transfer</NeonButton>
-            <NeonButton variant="ghost" size="md" onClick={() => setShowReceive(true)}>Receive</NeonButton>
+            <NeonButton variant="primary" size="md" onClick={() => requireWallet(() => setShowQuickTransfer(true))}>⚡ Quick Transfer</NeonButton>
+            <NeonButton variant="ghost" size="md" onClick={() => requireWallet(() => setShowReceive(true))}>Receive</NeonButton>
           </div>
           {/* Sync indicator */}
           <div className="absolute top-6 right-6">
-            <button onClick={syncNow} className="text-[10px] font-mono text-cyber-muted hover:text-neon-green transition-colors tracking-wider">
+            <button onClick={() => requireWallet(syncNow)} className="text-[10px] font-mono text-cyber-muted hover:text-neon-green transition-colors tracking-wider">
               {isSyncing ? 'SYNCING...' : '↻ SYNC'}
             </button>
           </div>
@@ -497,6 +563,7 @@ function PayerDashboard() {
         )}
       </div>
 
+      {showNoWallet && <NoWalletModal onClose={() => setShowNoWallet(false)} />}
       {showQuickTransfer && (
         <QuickTransferModal wallets={wallets ?? []} onClose={() => setShowQuickTransfer(false)} />
       )}

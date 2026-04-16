@@ -11,6 +11,22 @@ import { decrypt } from '../crypto/encryption';
 import { signPsbt, broadcastTx } from '../bitcoin/signing';
 import { sendSignalMessage } from '../signal/client';
 
+// Simple interval crons that can be run as independent per-schedule clocks.
+// Keyed by the exact cron string stored in PaymentSchedule.cronExpression.
+const INTERVAL_CRONS: Record<string, number> = {
+  '*/10 * * * *': 10 * 60 * 1000,
+  '*/20 * * * *': 20 * 60 * 1000,
+  '0 * * * *':    60 * 60 * 1000,
+  '0 */6 * * *':  6 * 60 * 60 * 1000,
+  '0 0 * * *':    24 * 60 * 60 * 1000,
+  '0 0 * * 1':    7 * 24 * 60 * 60 * 1000,
+};
+
+/** Returns the interval in ms for simple repeating crons, or null for calendar-based ones. */
+export function cronToIntervalMs(cron: string): number | null {
+  return INTERVAL_CRONS[cron] ?? null;
+}
+
 export interface PaymentJobData {
   scheduleId: string;
   walletId: string;
@@ -81,8 +97,11 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     },
   });
 
-  // If no UTXOs in DB, try a fresh sync before failing — DB may be stale
-  if (wallet.utxos.length === 0) {
+  // Sync if DB is empty OR all UTXOs are UNCONFIRMED — unconfirmed UTXOs may have been
+  // dropped from the mempool since the last sync, causing bad-txns-inputs-missingorspent
+  // at broadcast time. Syncing first marks stale ones SPENT so we don't try to spend them.
+  const hasNoConfirmed = wallet.utxos.length === 0 || wallet.utxos.every(u => u.status === 'UNCONFIRMED');
+  if (hasNoConfirmed) {
     await syncWalletUtxos(walletId, wallet.network);
     wallet = await prisma.wallet.findUniqueOrThrow({
       where: { id: walletId },
@@ -300,16 +319,20 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     });
   }
 
-  // Update schedule timing — compute interval so each schedule keeps its own independent cadence
-  const { parseExpression } = await import('cron-parser');
-  let nextRunAt: Date | null = null;
-  try {
-    const expr = parseExpression(scheduleConfig.cronExpression, { tz: scheduleConfig.timezone });
-    const first = expr.next().toDate();
-    const second = expr.next().toDate();
-    const intervalMs = second.getTime() - first.getTime();
-    nextRunAt = new Date(Date.now() + intervalMs);
-  } catch {}
+  // Update schedule timing — use interval from now for simple repeats,
+  // or the next cron occurrence for calendar-based expressions.
+  const _intervalMs = cronToIntervalMs(scheduleConfig.cronExpression);
+  let nextRunAt: Date | null = _intervalMs ? new Date(Date.now() + _intervalMs) : null;
+  if (!nextRunAt) {
+    try {
+      const { parseExpression } = await import('cron-parser');
+      const expr = parseExpression(scheduleConfig.cronExpression, {
+        tz: scheduleConfig.timezone,
+        currentDate: new Date(),
+      });
+      nextRunAt = expr.next().toDate();
+    } catch {}
+  }
   await prisma.paymentSchedule.update({
     where: { id: scheduleId },
     data: { lastRunAt: new Date(), lastError: null, ...(nextRunAt && { nextRunAt }) },
@@ -320,7 +343,12 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
     const msg: string = err.message ?? String(err);
     // Transient errors (network timeouts, API failures, insufficient funds) should
     // let BullMQ retry the job — don't permanently deactivate the schedule.
+    // bad-txns-inputs-missingorsent → our DB UTXOs are stale (already spent on-chain).
+    // Unlock them and enqueue a sync so the next cron run sees fresh UTXOs.
+    const isStaleUtxos = msg.includes('bad-txns-inputs-missingorspent') || msg.includes('missing inputs');
+
     const isTransient =
+      isStaleUtxos ||
       err.name === 'AbortError' ||
       msg.includes('timeout') ||
       msg.includes('ECONNREFUSED') ||
@@ -329,10 +357,37 @@ export async function handlePayment(job: Job<PaymentJobData>): Promise<void> {
       msg.includes('No spendable UTXOs') ||
       msg.includes('Insufficient funds');  // wallet may receive more funds later
     if (isTransient) {
-      // Surface the error in the UI without deactivating the schedule
+      // If UTXOs are stale, unlock them immediately and queue a sync so next run
+      // starts with a clean UTXO set.
+      if (isStaleUtxos) {
+        await prisma.utxo.updateMany({
+          where: { walletId, isLocked: true },
+          data: { isLocked: false, lockedUntil: null, lockedByTxId: null },
+        }).catch(() => {});
+        const { utxoSyncQueue } = await import('./queues');
+        await utxoSyncQueue.add('stale-utxo-recovery', { walletId }, {
+          jobId: `stale-sync-${walletId}`,
+          priority: 1,
+        }).catch(() => {});
+      }
+
+      // Surface the error in the UI without deactivating the schedule.
+      // Always advance nextRunAt so the display doesn't stay stuck on ELAPSED.
+      const _errIntervalMs = cronToIntervalMs(scheduleConfig.cronExpression);
+      let nextRunAtOnError: Date | null = _errIntervalMs ? new Date(Date.now() + _errIntervalMs) : null;
+      if (!nextRunAtOnError) {
+        try {
+          const { parseExpression } = await import('cron-parser');
+          const expr = parseExpression(scheduleConfig.cronExpression, {
+            tz: scheduleConfig.timezone,
+            currentDate: new Date(),
+          });
+          nextRunAtOnError = expr.next().toDate();
+        } catch {}
+      }
       await prisma.paymentSchedule.update({
         where: { id: scheduleId },
-        data: { lastError: `[RETRYING] ${msg}` },
+        data: { lastError: `[RETRYING] ${msg}`, ...(nextRunAtOnError && { nextRunAt: nextRunAtOnError }) },
       }).catch(() => {});
       throw new Error(msg);
     }

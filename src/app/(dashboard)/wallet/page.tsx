@@ -51,8 +51,56 @@ function useRecipients() {
 
 /* ── Wallet Card ─────────────────────────────────────────────────────── */
 
+function DeleteWalletModal({ wallet, onConfirm, onCancel, loading }: {
+  wallet: any;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="w-full max-w-sm sv-card rounded-lg">
+        <div className="px-5 py-3 border-b border-cyber-border border-l-2 border-l-neon-red flex items-center justify-between">
+          <span className="text-[11px] font-mono text-neon-red uppercase tracking-[0.15em]">CONFIRM_DELETE_WALLET</span>
+          <button onClick={onCancel} className="text-cyber-muted hover:text-cyber-text font-mono text-sm">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs font-mono text-cyber-muted">Delete this wallet?</p>
+          <div className="bg-cyber-bg border border-cyber-border rounded divide-y divide-cyber-border/40">
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">NAME</span>
+              <span className="text-xs font-mono text-cyber-text font-semibold uppercase">{wallet.name.replace(/\s/g, '_')}</span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">BALANCE</span>
+              <span className="text-xs font-mono text-neon-green font-bold">
+                {wallet.balance ? BigInt(wallet.balance).toLocaleString() : '0'} <span className="text-cyber-muted font-normal">SATS</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">TYPE</span>
+              <span className="text-xs font-mono text-cyber-text">{wallet.addressType} · {wallet.network.toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">UTXOS</span>
+              <span className="text-xs font-mono text-cyber-text">{wallet._count?.utxos ?? 0}</span>
+            </div>
+          </div>
+          <p className="text-[10px] font-mono text-neon-red/70">THIS_ACTION_CANNOT_BE_UNDONE</p>
+          <div className="flex gap-2">
+            <NeonButton variant="amber" size="sm" className="flex-1" onClick={onCancel}>CANCEL</NeonButton>
+            <NeonButton variant="red" size="sm" className="flex-1" loading={loading} onClick={onConfirm}>DELETE</NeonButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WalletCard({ wallet, onDelete, deleting }: { wallet: any; onDelete: () => void; deleting: boolean }) {
   const { isSyncing, lastSyncedAt, syncNow } = useWalletSync(wallet.id);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const satsDisplay = (s: string | undefined) => {
     if (!s) return '—';
@@ -138,11 +186,19 @@ function WalletCard({ wallet, onDelete, deleting }: { wallet: any; onDelete: () 
         </NeonButton>
         <div className="flex-1" />
         <NeonButton variant="red" size="sm"
-          onClick={() => { if (confirm('Delete this wallet? This cannot be undone.')) onDelete(); }}
+          onClick={() => setConfirmDelete(true)}
           loading={deleting}>
           Delete
         </NeonButton>
       </div>
+      {confirmDelete && (
+        <DeleteWalletModal
+          wallet={wallet}
+          loading={deleting}
+          onConfirm={() => { onDelete(); setConfirmDelete(false); }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

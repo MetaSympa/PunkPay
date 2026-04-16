@@ -129,14 +129,172 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
     }
   }
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showSend, setShowSend] = useState(false);
+  const [sendForm, setSendForm] = useState({ toAddress: '', amountSats: '', feeRate: '5' });
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [sentTxid, setSentTxid] = useState('');
+
+  const balanceSats = Number(wallet?.balance ?? 0);
+  const estimatedFee = Math.ceil(111.5 * (parseInt(sendForm.feeRate) || 1));
+  const maxSendable = Math.max(0, balanceSats - estimatedFee);
+  const amountNum = parseInt(sendForm.amountSats) || 0;
+  const willOverdraw = amountNum + estimatedFee > balanceSats;
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    setSending(true); setSendError('');
+    try {
+      const res = await fetch('/api/recipient/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toAddress: sendForm.toAddress.trim(),
+          amountSats: parseInt(sendForm.amountSats),
+          walletId: id,
+          feeRate: parseInt(sendForm.feeRate),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Send failed');
+      setSentTxid(data.txid);
+      queryClient.invalidateQueries({ queryKey: ['wallet', id] });
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+    } catch (err: any) {
+      setSendError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function handleDelete() {
-    if (!confirm(`Delete wallet "${wallet!.name}"? This cannot be undone.`)) return;
     await deleteWallet.mutateAsync(id);
     router.push('/wallet');
   }
 
   return (
     <div className="space-y-5 overflow-hidden">
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={e => { if (e.target === e.currentTarget) setConfirmDelete(false); }}>
+          <div className="w-full max-w-sm sv-card rounded-lg">
+            <div className="px-5 py-3 border-b border-cyber-border border-l-2 border-l-neon-red flex items-center justify-between">
+              <span className="text-[11px] font-mono text-neon-red uppercase tracking-[0.15em]">CONFIRM_DELETE_WALLET</span>
+              <button onClick={() => setConfirmDelete(false)} className="text-cyber-muted hover:text-cyber-text font-mono text-sm">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-xs font-mono text-cyber-muted">Delete this wallet?</p>
+              <div className="bg-cyber-bg border border-cyber-border rounded divide-y divide-cyber-border/40">
+                <div className="flex justify-between items-center px-3 py-2">
+                  <span className="text-[10px] font-mono text-cyber-muted tracking-wider">NAME</span>
+                  <span className="text-xs font-mono text-cyber-text font-semibold uppercase">{wallet.name.replace(/\s/g, '_')}</span>
+                </div>
+                <div className="flex justify-between items-center px-3 py-2">
+                  <span className="text-[10px] font-mono text-cyber-muted tracking-wider">BALANCE</span>
+                  <span className="text-xs font-mono text-neon-green font-bold">
+                    {wallet.balance ? BigInt(wallet.balance).toLocaleString() : '0'} <span className="text-cyber-muted font-normal">SATS</span>
+                  </span>
+                </div>
+                <div className="flex justify-between items-center px-3 py-2">
+                  <span className="text-[10px] font-mono text-cyber-muted tracking-wider">TYPE</span>
+                  <span className="text-xs font-mono text-cyber-text">{(wallet as any).addressType} · {wallet.network.toUpperCase()}</span>
+                </div>
+                <div className="flex justify-between items-center px-3 py-2">
+                  <span className="text-[10px] font-mono text-cyber-muted tracking-wider">UTXOS</span>
+                  <span className="text-xs font-mono text-cyber-text">{(wallet as any)._count?.utxos ?? 0}</span>
+                </div>
+              </div>
+              <p className="text-[10px] font-mono text-neon-red/70">THIS_ACTION_CANNOT_BE_UNDONE</p>
+              <div className="flex gap-2">
+                <NeonButton variant="amber" size="sm" className="flex-1" onClick={() => setConfirmDelete(false)}>CANCEL</NeonButton>
+                <NeonButton variant="red" size="sm" className="flex-1" loading={deleteWallet.isPending} onClick={handleDelete}>DELETE</NeonButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send modal */}
+      {showSend && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) { setShowSend(false); setSentTxid(''); setSendError(''); } }}>
+          <div className="w-full sm:max-w-md sv-card rounded-t-2xl sm:rounded-lg">
+            <div className="px-5 py-3 border-b border-cyber-border border-l-2 border-l-neon-green flex items-center justify-between">
+              <span className="text-[11px] font-mono text-neon-green uppercase tracking-[0.15em]">⚡ SEND_BITCOIN</span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-mono text-cyber-muted">
+                  BAL: <span className="text-neon-green font-semibold">{balanceSats.toLocaleString()}</span> SATS
+                </span>
+                <button onClick={() => { setShowSend(false); setSentTxid(''); setSendError(''); }}
+                  className="text-cyber-muted hover:text-cyber-text font-mono text-sm">✕</button>
+              </div>
+            </div>
+            <div className="p-5">
+              {sentTxid ? (
+                <div className="space-y-4">
+                  <p className="text-neon-green font-mono text-sm">✓ Broadcast successful</p>
+                  <div>
+                    <p className="sv-stat-label">TXID</p>
+                    <a href={`https://mutinynet.com/tx/${sentTxid}`} target="_blank" rel="noopener noreferrer"
+                      className="font-mono text-xs text-neon-green break-all hover:underline mt-1 inline-block">{sentTxid}</a>
+                  </div>
+                  <NeonButton variant="primary" className="w-full" onClick={() => { setShowSend(false); setSentTxid(''); }}>Done</NeonButton>
+                </div>
+              ) : (
+                <form onSubmit={handleSend} className="space-y-4">
+                  <div>
+                    <label className="sv-label">TO_ADDRESS</label>
+                    <input type="text" value={sendForm.toAddress}
+                      onChange={e => setSendForm(f => ({ ...f, toAddress: e.target.value }))}
+                      placeholder="tb1p… or bc1p…" className="sv-input mt-1 text-xs" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="sv-label">AMOUNT (SATS)</label>
+                        <button type="button"
+                          onClick={() => maxSendable > 330 && setSendForm(f => ({ ...f, amountSats: String(maxSendable) }))}
+                          className="text-[10px] font-mono text-neon-green hover:text-neon-green/70 tracking-wider transition-colors">
+                          MAX
+                        </button>
+                      </div>
+                      <input type="number" value={sendForm.amountSats}
+                        onChange={e => setSendForm(f => ({ ...f, amountSats: e.target.value }))}
+                        min="330" className="sv-input mt-1" required />
+                      {balanceSats > 0 && sendForm.amountSats && (
+                        <p className={`text-[10px] font-mono mt-1 ${willOverdraw ? 'text-neon-red' : 'text-cyber-muted'}`}>
+                          ~{estimatedFee.toLocaleString()} sats fee · {(balanceSats - amountNum - estimatedFee).toLocaleString()} remaining
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="sv-label">FEE (SAT/VB)</label>
+                      <input type="number" value={sendForm.feeRate}
+                        onChange={e => setSendForm(f => ({ ...f, feeRate: e.target.value }))}
+                        min="1" max="1000" className="sv-input mt-1" />
+                    </div>
+                  </div>
+                  {sendError && (
+                    <p className="text-neon-red text-xs font-mono bg-neon-red/5 border border-neon-red/20 rounded px-3 py-2">{sendError}</p>
+                  )}
+                  <div className="flex gap-3">
+                    <NeonButton type="submit" variant="primary" loading={sending}
+                      disabled={!sendForm.toAddress || !sendForm.amountSats || willOverdraw} className="flex-1">
+                      SEND
+                    </NeonButton>
+                    <NeonButton type="button" variant="ghost" onClick={() => { setShowSend(false); setSendError(''); }} className="flex-1">
+                      CANCEL
+                    </NeonButton>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start gap-3">
         <Link href="/wallet"><NeonButton variant="ghost" size="sm">←</NeonButton></Link>
@@ -160,7 +318,10 @@ export default function WalletDetailPage({ params }: { params: Promise<{ id: str
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
         <NeonButton variant="primary" size="sm" onClick={() => handleSync(false)} loading={syncing}>↺ SYNC</NeonButton>
-        <NeonButton variant="red" size="sm" onClick={handleDelete} loading={deleteWallet.isPending}>DELETE</NeonButton>
+        {(wallet as any).hasSeed && (
+          <NeonButton variant="green" size="sm" onClick={() => { setShowSend(true); setSentTxid(''); setSendError(''); }}>⚡ SEND</NeonButton>
+        )}
+        <NeonButton variant="red" size="sm" onClick={() => setConfirmDelete(true)} loading={deleteWallet.isPending}>DELETE</NeonButton>
       </div>
 
       {/* Sync result */}

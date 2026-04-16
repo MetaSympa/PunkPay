@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   useSchedules, useToggleSchedule, useDeleteSchedule, useCreateSchedule, useSendNow,
@@ -222,15 +223,77 @@ function useCountdown(targetDate: string | null, isActive: boolean): { label: st
   if (!isActive || !targetDate) return { label: 'HALTED', state: 'halted' };
   const diff = new Date(targetDate).getTime() - now;
   if (diff <= 0) {
-    return { label: `${formatDuration(diff)} ELAPSED`, state: 'overdue' };
+    return { label: 'PENDING', state: 'overdue' };
   }
   return { label: formatDuration(diff), state: 'waiting' };
+}
+
+function DeleteConfirmModal({ schedule, onConfirm, onCancel, loading }: {
+  schedule: any;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-cyber-bg/80 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="sv-card w-full max-w-sm rounded-lg">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-cyber-border border-l-2 border-l-neon-red">
+          <span className="text-[11px] font-mono text-neon-red uppercase tracking-[0.15em]">CONFIRM_DELETE</span>
+          <button onClick={onCancel} className="text-cyber-muted hover:text-cyber-text font-mono text-sm">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs font-mono text-cyber-muted">Delete this payment schedule?</p>
+
+          {/* Schedule summary */}
+          <div className="bg-cyber-bg border border-cyber-border rounded divide-y divide-cyber-border/40">
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">RECIPIENT</span>
+              <span className="text-xs font-mono text-cyber-text font-semibold uppercase">
+                {schedule.recipientName?.replace(/\s/g, '_') || 'UNNAMED'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">AMOUNT</span>
+              <span className="text-xs font-mono text-neon-green font-bold">
+                {BigInt(schedule.amountSats).toLocaleString()} <span className="text-cyber-muted font-normal">SATS</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">FREQUENCY</span>
+              <span className="text-xs font-mono text-cyber-text">{cronLabel(schedule.cronExpression)}</span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">WALLET</span>
+              <span className="text-xs font-mono text-cyber-text">{schedule.wallet?.name || '—'}</span>
+            </div>
+            <div className="flex justify-between items-center px-3 py-2">
+              <span className="text-[10px] font-mono text-cyber-muted tracking-wider">TOTAL_RUNS</span>
+              <span className="text-xs font-mono text-cyber-text">{schedule._count.transactions}</span>
+            </div>
+          </div>
+
+          <p className="text-[10px] font-mono text-neon-red/70">THIS_ACTION_CANNOT_BE_UNDONE</p>
+
+          <div className="flex gap-2">
+            <NeonButton variant="amber" size="sm" className="flex-1" onClick={onCancel}>
+              CANCEL
+            </NeonButton>
+            <NeonButton variant="red" size="sm" className="flex-1" loading={loading} onClick={onConfirm}>
+              DELETE
+            </NeonButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ScheduleRow({ schedule }: { schedule: any }) {
   const toggle = useToggleSchedule();
   const del = useDeleteSchedule();
   const countdown = useCountdown(schedule.nextRunAt, schedule.isActive);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const statusColor = schedule.isActive ? 'text-neon-green' : 'text-neon-amber';
 
@@ -282,7 +345,7 @@ function ScheduleRow({ schedule }: { schedule: any }) {
               </NeonButton>
             )}
             <NeonButton variant="red" size="sm" loading={del.isPending}
-              onClick={() => { if (confirm('Delete this schedule?')) del.mutate(schedule.id); }}>
+              onClick={() => setConfirmDelete(true)}>
               ✕
             </NeonButton>
           </div>
@@ -296,6 +359,15 @@ function ScheduleRow({ schedule }: { schedule: any }) {
             </div>
           </td>
         </tr>
+      )}
+      {confirmDelete && createPortal(
+        <DeleteConfirmModal
+          schedule={schedule}
+          loading={del.isPending}
+          onConfirm={() => { del.mutate(schedule.id); setConfirmDelete(false); }}
+          onCancel={() => setConfirmDelete(false)}
+        />,
+        document.body
       )}
     </>
   );

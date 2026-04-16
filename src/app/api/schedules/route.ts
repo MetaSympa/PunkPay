@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { createScheduleSchema } from '@/lib/validation';
 import { createAuditLog } from '@/skills/security/audit-log';
 import { parseExpression } from 'cron-parser';
+import { cronToIntervalMs } from '@/lib/scheduler/handlers';
 
 export async function GET() {
   const session = await auth();
@@ -43,13 +44,12 @@ export async function POST(req: NextRequest) {
     });
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-    // Compute interval from cron so each schedule gets its own independent timer
-    // (not snapped to wall-clock boundaries like :00, :10, :20)
-    const expr = parseExpression(data.cronExpression, { tz: data.timezone });
-    const first = expr.next().toDate();
-    const second = expr.next().toDate();
-    const intervalMs = second.getTime() - first.getTime();
-    const nextRun = new Date(Date.now() + intervalMs);
+    // For simple intervals, next run = now + interval (independent per-schedule clock).
+    // For calendar crons, use cron-parser to find the next wall-clock occurrence.
+    const intervalMs = cronToIntervalMs(data.cronExpression);
+    const nextRun = intervalMs
+      ? new Date(Date.now() + intervalMs)
+      : parseExpression(data.cronExpression, { tz: data.timezone, currentDate: new Date() }).next().toDate();
 
     const schedule = await prisma.paymentSchedule.create({
       data: {

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { prisma } from '../lib/db';
 import { paymentQueue, utxoSyncQueue } from '../lib/scheduler/queues';
-import { handlePayment, handleUtxoSync, handleTxMonitor, handleNotification } from '../lib/scheduler/handlers';
+import { handlePayment, handleUtxoSync, handleTxMonitor, handleNotification, cronToIntervalMs } from '../lib/scheduler/handlers';
 import { MempoolWsManager } from '../lib/bitcoin/mempool-ws';
 import type { PaymentJobData } from '../lib/scheduler/handlers';
 
@@ -92,9 +92,17 @@ async function syncSchedules() {
         maxFeeRate: schedule.maxFeeRate,
       };
 
+      // Use `every + startDate` for simple interval crons so each schedule gets
+      // its own independent phase anchored to creation time, rather than all
+      // firing on the same wall-clock boundaries (e.g. :00, :10, :20...).
+      const intervalMs = cronToIntervalMs(schedule.cronExpression);
+      const repeat = intervalMs
+        ? { every: intervalMs, startDate: schedule.createdAt }
+        : { pattern: schedule.cronExpression };
+
       await paymentQueue.upsertJobScheduler(
         `sched:${schedule.id}`,
-        { pattern: schedule.cronExpression },
+        repeat,
         { name: 'payment', data: jobData },
       );
     }
