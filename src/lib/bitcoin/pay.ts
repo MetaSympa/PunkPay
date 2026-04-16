@@ -130,26 +130,33 @@ export async function buildAndBroadcastPayment({
       ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
     ];
 
-    const mnemonic = decrypt(wallet.encryptedSeed!);
     const inputPaths = selected.map(s => {
       const d = utxoData.find(u => u.txid === s.txid && u.vout === s.vout)!;
       return { chain: d.chain, index: d.index };
     });
 
-    let rawHex = await signPsbt(serializePsbt(buildPsbt(inputs, outputs, wallet.network)), mnemonic, inputPaths, addrType, wallet.network);
-
-    // Verify fee against actual vsize — estimate can be off by 1-2 vbytes.
-    // If underpaying, rebuild with the exact fee and resign (one pass is enough).
-    const realFee = BigInt(Math.ceil(bitcoin.Transaction.fromHex(rawHex).virtualSize() * feeRate));
-    if (realFee > actualFee) {
-      actualFee = realFee;
-      change = totalInput - amountSats - actualFee;
-      outputs = [
-        { address: recipientAddress, valueSats: amountSats },
-        ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
-      ];
+    // Scope the mnemonic to the narrowest possible block — it goes out of reference
+    // at the closing brace, before broadcastTx and all DB writes. JS strings are
+    // immutable so we cannot zero the underlying bytes, but dropping the only
+    // reference makes it GC-eligible before any async I/O that could extend lifetime.
+    let rawHex: string;
+    {
+      const mnemonic = decrypt(wallet.encryptedSeed!);
       rawHex = await signPsbt(serializePsbt(buildPsbt(inputs, outputs, wallet.network)), mnemonic, inputPaths, addrType, wallet.network);
-    }
+
+      // Verify fee against actual vsize — estimate can be off by 1-2 vbytes.
+      // If underpaying, rebuild with the exact fee and resign (one pass is enough).
+      const realFee = BigInt(Math.ceil(bitcoin.Transaction.fromHex(rawHex).virtualSize() * feeRate));
+      if (realFee > actualFee) {
+        actualFee = realFee;
+        change = totalInput - amountSats - actualFee;
+        outputs = [
+          { address: recipientAddress, valueSats: amountSats },
+          ...(change > 330n ? [{ address: changeAddr.address, valueSats: change }] : []),
+        ];
+        rawHex = await signPsbt(serializePsbt(buildPsbt(inputs, outputs, wallet.network)), mnemonic, inputPaths, addrType, wallet.network);
+      }
+    } // mnemonic reference dropped here — before network broadcast and DB work
 
     const txid = await broadcastTx(rawHex, wallet.network);
 
